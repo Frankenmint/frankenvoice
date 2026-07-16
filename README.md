@@ -6,12 +6,12 @@
 
 **Local-first composite speech synthesis built from real recorded words.**
 
-![frankenvoice audio stereogram](https://github.com/Frankenmint/frankenvoice/blob/main/assets/hero.jpeg?raw=true)
+![frankenvoice audio stereogram](https://github.com/Frankenmint/frankenvoice/blob/main/assets/hero.jpeg?raw=true)  
 
-🕒 Average time to solve the hidden image: ~30 seconds
+🕒 Average time to solve the hidden image: ~30 seconds  
 
 
-# What is FrankenVoice?
+# What is FrankenVoice?  
 
 FrankenVoice reconstructs speech from **real recorded audio** instead of generating it from scratch.
 
