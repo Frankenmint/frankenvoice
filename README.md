@@ -1,72 +1,127 @@
-# frankenvoice
-Qwen3 Hackathon Submission
+<div align="center">
 
-# Setup
-this app requires node and python and sqlite pre-requisites.
+# ⚡ FrankenVoice ⚡
 
-run the following commands:
+### *Look through the noise. Hear the voice inside it.*
+
+**Local-first composite speech synthesis built from real recorded words.**
+
+<img src="../assets/hero.jpeg" alt="FrankenVoice Autostereogram" width="100%"/>
+
+🕒 Average time to solve the hidden image: ~30 seconds
+
+
+# What is FrankenVoice?
+
+FrankenVoice reconstructs speech from **real recorded audio** instead of generating it from scratch.
+
+Feed it long-form recordings—interviews, podcasts, YouTube videos, speeches—and it:
+
+- 🎙️ Transcribes every spoken word
+- 🔎 Builds a searchable database of clips
+- 🧩 Finds matching words across every recording
+- ⚡ Stitches real human recordings into entirely new sentences
+- 🎛️ Applies a unified effects chain so every fragment sounds like one transmission
+
+The result feels less like traditional TTS and more like intercepting a transmission assembled from thousands of recovered voice fragments.
+
+---
+
+# Demo Workflow
+
+1. Paste a YouTube URL.
+2. FrankenVoice downloads audio.
+3. Whisper transcribes every word.
+4. Every spoken word becomes an indexed audio fragment.
+5. Type anything.
+6. FrankenVoice searches its database.
+7. Matching clips are assembled.
+8. A shared audio filter creates one cohesive synthetic voice.
 
 ```
-npm create vite@latest frankenvoice-ui -- --template react-ts 
+YouTube
+    │
+    ▼
+Audio Extraction
+    │
+    ▼
+Whisper Transcription
+    │
+    ▼
+Word Database
+    │
+    ▼
+Clip Selection
+    │
+    ▼
+Audio Stitching
+    │
+    ▼
+Shared Filter Chain
+    │
+    ▼
+FrankenVoice
+```
+
+---
+
+<details>
+
+<summary><strong>👀 Can't see the hidden image?</strong></summary>
+
+Autostereograms are viewed by relaxing your focus beyond the screen.
+
+Instead of looking **at** the picture, look **through** it.
+
+After several seconds the repeating patterns merge together and reveal:
+
+- 🤖 a robot face
+- ⚡ the word **FRANKENVOICE**
+
+Once you see it, you'll never unsee it.
+
+</details>
+
+---
+
+# Setup
+
+This application requires:
+
+- Node.js
+- Python
+- SQLite
+
+## Frontend
+
+```bash
+npm create vite@latest frankenvoice-ui -- --template react-ts
 npm install tailwindcss postcss autoprefixer wavesurfer.js axios lucide-react clsx tailwind-merge
 ```
 
+## Backend
 
-# How to Run the Demo  
-
-Backend:  
+```bash
+cd backend
+pip install -r requirements.txt
+python app.py
 ```
-cd backend  
-pip install -r requirements.txt  
-python app.py  
-```
-Frontend:  
-```
-cd frontend  
-npm install  
-npm run dev  
-```
-Workflow:  
 
-1. Go to Left Panel, paste a YouTube URL (e.g., a long interview).  
-1. Wait for processing (check terminal logs).  
-1. Go to Center Panel, type: "I am trying to reach you."  
-1. Click GENERATE TRANSMISSION.  
-1. Listen to the stitched, filtered result.  
-1. Toggle "Robot Radio" filter off/on in Right Panel to hear the difference.  
+## Frontend
 
-# WIP Expansion  
-
-1. Phoneme Fallback: Integrate espeak-ng to generate missing words phonetically instead of silence.  
-1. Prosody Matching: Analyze pitch contour of surrounding words and pitch-shift the selected clip to match (using librosa.effects.pitch_shift).  
-1. TTS API Compatibility: Wrap the /generate endpoint to accept OpenAI-compatible JSON requests, allowing FrankenVoice to be dropped into any app that supports standard TTS APIs.  
-
-
-# Folder layout structure
+```bash
+cd frontend
+npm install
+npm run dev
 ```
-frankenvoice/
-├── backend/
-│   ├── app.py                  # FastAPI Entry Point
-│   ├── engine.py               # Core Logic (Ingestion, Transcription, Synthesis)
-│   ├── db.py                   # SQLite & Metadata Management
-│   ├── audio_utils.py          # FFmpeg/Librosa wrappers
-│   ├── filters.py              # Audio Filter Chains (Robot, Radio, etc.)
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── components/
-│   │   │   ├── SourceManager.tsx
-│   │   │   ├── Composer.tsx       # Center Panel
-│   │   │   ├── WordBlock.tsx      # Individual Editable Token
-│   │   │   ├── DatasetInspector.tsx
-│   │   │   └── VoiceControls.tsx  # Right Panel
-│   │   ├── hooks/
-│   │   │   └── useAudioPlayer.ts
-│   │   └── api.ts
-│   └── package.json
-└── data/                     # Shared volume for clips/db
-    ├── dataset/
-    ├── sources/
-    └── metadata.sqlite
-```
+
+---
+
+# Current WIP
+
+- Phoneme fallback via espeak-ng
+- Prosody matching with pitch contour analysis
+- OpenAI-compatible TTS API
+- Improved clip ranking
+- Voice dataset management
+- Additional transmission effects
