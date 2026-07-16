@@ -9,3 +9,5 @@ librosa
 numpy
 scipy
 ffmpeg-python
+pyrubberband
+soundfile

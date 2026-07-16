@@ -1,68 +1,53 @@
-# Inside app.py or a dedicated synthesizer module
-
 from pydub import AudioSegment
 from pydub.effects import normalize
+import numpy as np
 import random
-import io
-from db import get_clips_for_word
-from filters import apply_radio_filter # Defined below
 
-def generate_speech(text: str, seed: int = None, filter_preset: str = "robot_radio"):
-    if seed:
-        random.seed(seed)
-        
-    tokens = text.split()
-    final_audio = AudioSegment.silent(duration=0)
+def apply_filter_chain(audio: AudioSegment, preset: str = "robot_radio") -> AudioSegment:
+    """Router for audio presets"""
+    if preset == "clean":
+        return normalize(audio, headroom=2.0)
     
-    for token in tokens:
-        clean_token = token.lower().strip(".,!?;:\"'")
+    elif preset == "robot_radio":
+        return apply_radio_filter(audio)
+    
+    elif preset == "telephone":
+        return apply_telephone_filter(audio)
         
-        # 1. Try to find clip
-        clips = get_clips_for_word(clean_token)
+    elif preset == "damaged_tape":
+        return apply_tape_filter(audio)
         
-        if clips:
-            # Select random clip
-            selected = random.choice(clips)
-            clip_path = selected['file_path']
-            try:
-                seg = AudioSegment.from_wav(clip_path)
-                # Trim silence from edges of clip for tighter stitching
-                seg = seg.strip_silence(silence_thresh=-40, padding=10)
-            except Exception as e:
-                print(f"Error loading clip {clip_path}: {e}")
-                seg = generate_fallback_tts(token) # Fallback
-        else:
-            # 2. Fallback TTS (Mocked for MVP, would use pyttsx3 or similar)
-            seg = generate_fallback_tts(token)
-            
-        # Add small pause between words (randomized slightly for human feel)
-        pause_len = random.randint(50, 150) 
-        final_audio += seg + AudioSegment.silent(duration=pause_len)
+    else:
+        # Default fallback
+        return apply_radio_filter(audio)
 
-    # 3. Apply Global Filter
-    if filter_preset == "robot_radio":
-        final_audio = apply_radio_filter(final_audio)
-        
-    # 4. Export to Bytes
-    out_buf = io.BytesIO()
-    final_audio.export(out_buf, format="wav")
-    out_buf.seek(0)
-    return out_buf
-
-def generate_fallback_tts(text):
-    """Simple fallback using system TTS or silent placeholder"""
-    # For hackathon MVP, we might just return a silent beep or use pyttsx3
-    # Here returning a generated tone for demonstration
-    return AudioSegment.silent(duration=len(text)*100) 
-
-# In filters.py
 def apply_radio_filter(audio: AudioSegment) -> AudioSegment:
-    # High Pass Filter (remove rumble)
+    # Bandpass for radio sound
     audio = audio.high_pass_filter(300)
-    # Low Pass Filter (telephone effect)
-    audio = audio.low_pass_filter(3000)
-    # Compression (squash dynamics)
-    # Pydub doesn't have native complex compression, so we normalize heavily
+    audio = audio.low_pass_filter(3400)
+    # Heavy compression via normalization
     audio = normalize(audio, headroom=1.0)
-    # Add slight static noise (optional)
+    return audio
+
+def apply_telephone_filter(audio: AudioSegment) -> AudioSegment:
+    # Narrower bandpass
+    audio = audio.high_pass_filter(600)
+    audio = audio.low_pass_filter(2500)
+    audio = normalize(audio, headroom=0.5)
+    return audio
+
+def apply_tape_filter(audio: AudioSegment) -> AudioSegment:
+    # Simulate wow/flutter by slightly shifting speed (simplified)
+    # And add some noise floor
+    audio = audio.low_pass_filter(5000)
+    audio = normalize(audio, headroom=3.0)
+    
+    # Add simple static noise
+    noise = AudioSegment.silent(duration=len(audio))
+    # Generate random noise data
+    noise_samples = np.random.normal(0, 500, len(audio.get_array_of_samples()))
+    noise = audio._spawn(noise_samples.astype(np.int16).tobytes())
+    
+    # Mix noise at low volume
+    audio = audio.overlay(noise - 20)
     return audio
