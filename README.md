@@ -12,33 +12,33 @@ npm install tailwindcss postcss autoprefixer wavesurfer.js axios lucide-react cl
 ```
 
 
-How to Run the Demo  
+# How to Run the Demo  
 
-    Backend:  
-
-    cd backend  
-    pip install -r requirements.txt  
-    python app.py  
-
-    Frontend:  
-
-    cd frontend  
-    npm install  
-    npm run dev  
-
-    Workflow:  
-        Go to Left Panel, paste a YouTube URL (e.g., a long interview).  
-        Wait for processing (check terminal logs).  
-        Go to Center Panel, type: "I am trying to reach you."  
-        Click GENERATE TRANSMISSION.  
-        Listen to the stitched, filtered result.  
-        Toggle "Robot Radio" filter off/on in Right Panel to hear the difference.  
+Backend:  
+```
+cd backend  
+pip install -r requirements.txt  
+python app.py  
+```
+Frontend:  
+```
+cd frontend  
+npm install  
+npm run dev  
+```
+Workflow:  
+    Go to Left Panel, paste a YouTube URL (e.g., a long interview).  
+    Wait for processing (check terminal logs).  
+    Go to Center Panel, type: "I am trying to reach you."  
+    Click GENERATE TRANSMISSION.  
+    Listen to the stitched, filtered result.  
+    Toggle "Robot Radio" filter off/on in Right Panel to hear the difference.  
 
 Future Expansion (Post-Hackathon)  
 
-    Phoneme Fallback: Integrate espeak-ng to generate missing words phonetically instead of silence.  
-    Prosody Matching: Analyze pitch contour of surrounding words and pitch-shift the selected clip to match (using librosa.effects.pitch_shift).  
-    TTS API Compatibility: Wrap the /generate endpoint to accept OpenAI-compatible JSON requests, allowing FrankenVoice to be dropped into any app that supports standard TTS APIs.  
+Phoneme Fallback: Integrate espeak-ng to generate missing words phonetically instead of silence.  
+Prosody Matching: Analyze pitch contour of surrounding words and pitch-shift the selected clip to match (using librosa.effects.pitch_shift).  
+TTS API Compatibility: Wrap the /generate endpoint to accept OpenAI-compatible JSON requests, allowing FrankenVoice to be dropped into any app that supports standard TTS APIs.  
 
 ```
 frankenvoice/
