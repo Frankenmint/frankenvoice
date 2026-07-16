@@ -1,5 +1,3 @@
-<div align="center">
-
 # ⚡ FrankenVoice ⚡
 
 ### *Look through the noise. Hear the voice inside it.*
@@ -62,27 +60,6 @@ Shared Filter Chain
     ▼
 FrankenVoice
 ```
-
----
-
-<details>
-
-<summary><strong>👀 Can't see the hidden image?</strong></summary>
-
-Autostereograms are viewed by relaxing your focus beyond the screen.
-
-Instead of looking **at** the picture, look **through** it.
-
-After several seconds the repeating patterns merge together and reveal:
-
-- 🤖 a robot face
-- ⚡ the word **FRANKENVOICE**
-
-Once you see it, you'll never unsee it.
-
-</details>
-
----
 
 # Setup
 
