@@ -4,101 +4,92 @@
 
 **Local-first composite speech synthesis built from real recorded words.**
 
-![frankenvoice audio stereogram](https://github.com/Frankenmint/frankenvoice/blob/main/assets/hero.jpeg?raw=true)  
+![frankenvoice audio stereogram](https://github.com/Frankenmint/frankenvoice/blob/main/assets/hero.jpeg?raw=true)
 
-🕒 Average time to solve the hidden image: ~30 seconds  
-
-
-# What is FrankenVoice?  
+# What is FrankenVoice?
 
 FrankenVoice reconstructs speech from **real recorded audio** instead of generating it from scratch.
 
 Feed it long-form recordings—interviews, podcasts, YouTube videos, speeches—and it:
 
-- 🎙️ Transcribes every spoken word
-- 🔎 Builds a searchable database of clips
-- 🧩 Finds matching words across every recording
-- ⚡ Stitches real human recordings into entirely new sentences
-- 🎛️ Applies a unified effects chain so every fragment sounds like one transmission
+- Transcribes every spoken word
+- Builds a searchable database of clips
+- Finds matching words across every recording
+- Stitches real human recordings into new sentences
+- Applies one shared effects chain so fragments sound like one transmission
 
-The result feels less like traditional TTS and more like intercepting a transmission assembled from thousands of recovered voice fragments.
+## Demo workflow
 
----
-
-# Demo Workflow
-
-1. Paste a YouTube URL.
-2. FrankenVoice downloads audio.
-3. Whisper transcribes every word.
-4. Every spoken word becomes an indexed audio fragment.
-5. Type anything.
-6. FrankenVoice searches its database.
-7. Matching clips are assembled.
-8. A shared audio filter creates one cohesive synthetic voice.
-
-```
-YouTube
-    │
-    ▼
-Audio Extraction
-    │
-    ▼
-Whisper Transcription
-    │
-    ▼
-Word Database
-    │
-    ▼
-Clip Selection
-    │
-    ▼
-Audio Stitching
-    │
-    ▼
-Shared Filter Chain
-    │
-    ▼
-FrankenVoice
+```text
+YouTube or local audio
+→ audio extraction
+→ Whisper word timestamps
+→ indexed word clips
+→ clip selection
+→ audio stitching
+→ shared filter chain
+→ FrankenVoice WAV
 ```
 
-# Setup
+## Requirements
 
-This application requires:
-
-- Node.js
-- Python
-- SQLite
-
-## Frontend
-
-```bash
-npm create vite@latest frankenvoice-ui -- --template react-ts
-npm install tailwindcss postcss autoprefixer wavesurfer.js axios lucide-react clsx tailwind-merge
-```
+- Node.js 20+
+- Python 3.11+
+- FFmpeg
+- `yt-dlp`
+- `espeak-ng` for missing-word fallback
+- Rubber Band CLI for optional prosody matching
 
 ## Backend
 
+From repository root:
+
 ```bash
-cd backend
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-python app.py
+uvicorn backend.app:app --reload
+```
+
+API: `http://localhost:8000`
+
+Health check:
+
+```bash
+curl http://localhost:8000/health
 ```
 
 ## Frontend
 
 ```bash
-cd frontend
 npm install
 npm run dev
 ```
 
----
+UI: `http://localhost:5173`
 
-# Current WIP
+Set a different backend URL with:
 
-- Phoneme fallback via espeak-ng
-- Prosody matching with pitch contour analysis
-- OpenAI-compatible TTS API
-- Improved clip ranking
-- Voice dataset management
-- Additional transmission effects
+```bash
+VITE_API_BASE_URL=http://localhost:8000 npm run dev
+```
+
+## QA
+
+```bash
+pip install -r requirements-test.txt
+python -m compileall backend tests
+python -m pytest -q
+npm install
+npm run build
+```
+
+GitHub Actions runs backend smoke tests and frontend production builds on every pull request.
+
+## Current WIP
+
+- Per-word reroll wired to backend clip IDs
+- Voice dataset filtering
+- Source job progress
+- Waveform editing
+- Expanded OpenAI-compatible response formats

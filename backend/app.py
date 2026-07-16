@@ -1,72 +1,94 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from typing import Optional
 import io
-from engine import generate_speech
-from filters import apply_filter_chain # Import your filter logic
+from contextlib import asynccontextmanager
+from typing import Literal, Optional
 
-app = FastAPI()
+from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+
+from backend import db, engine
+from backend.engine import generate_speech
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    db.init_db()
+    yield
+
+
+app = FastAPI(title="FrankenVoice", version="0.1.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class GenerateRequest(BaseModel):
-    text: str
+    text: str = Field(min_length=1)
     voice_id: str = "default"
     seed: Optional[int] = None
-    filter_preset: str = "robot_radio"
+    filter_preset: Literal["clean", "robot_radio", "telephone", "damaged_tape"] = (
+        "robot_radio"
+    )
+
 
 class OpenAITTSRequest(BaseModel):
     model: str = "frankenvoice-1"
-    input: str
+    input: str = Field(min_length=1)
     voice: str = "default"
-    response_format: str = "wav"
-    speed: float = 1.0
+    response_format: Literal["wav", "mp3"] = "wav"
+    speed: float = Field(default=1.0, ge=0.25, le=4.0)
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok"}
+
 
 @app.post("/api/speech/generate")
 def generate_speech_endpoint(req: GenerateRequest):
-    audio_buffer = generate_speech(req.text, req.voice_id, req.seed, req.filter_preset)
-    return StreamingResponse(audio_buffer, media_type="audio/wav")
+    audio_buffer = generate_speech(
+        req.text, req.voice_id, req.seed, req.filter_preset
+    )
+    return StreamingResponse(
+        audio_buffer,
+        media_type="audio/wav",
+        headers={"Content-Disposition": "attachment; filename=frankenvoice.wav"},
+    )
+
 
 @app.post("/v1/audio/speech")
-async def openai_tts_endpoint(req: OpenAITTSRequest):
-    """OpenAI Compatible Endpoint"""
+def openai_tts_endpoint(req: OpenAITTSRequest):
     try:
-        # Map OpenAI voice names to your presets if needed
-        preset = req.voice 
-        
         audio_buffer = generate_speech(
-            text=req.input, 
-            voice_id=preset, 
-            filter_preset=preset # Using voice name as preset key for simplicity
+            text=req.input,
+            voice_id=req.voice,
+            filter_preset="robot_radio",
         )
-        
-        # Handle format conversion if not wav
-        if req.response_format != "wav":
+        if req.response_format == "mp3":
             from pydub import AudioSegment
-            seg = AudioSegment.from_wav(audio_buffer)
+
+            segment = AudioSegment.from_wav(audio_buffer)
             out_buf = io.BytesIO()
-            seg.export(out_buf, format=req.response_format)
+            segment.export(out_buf, format="mp3")
             out_buf.seek(0)
             audio_buffer = out_buf
+        media_type = "audio/mpeg" if req.response_format == "mp3" else "audio/wav"
+        return StreamingResponse(audio_buffer, media_type=media_type)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-        mime_types = {"wav": "audio/wav", "mp3": "audio/mpeg"}
-        return StreamingResponse(
-            audio_buffer, 
-            media_type=mime_types.get(req.response_format, "audio/wav")
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
-@app.on_event("startup")
-def startup():
-    db.init_db()
-
-@app.post("/api/sources/youtube")
+@app.post("/api/sources/youtube", status_code=202)
 def import_youtube(url: str, background_tasks: BackgroundTasks):
-    # Simplified: In real app, return job ID immediately
     path = engine.ingest_youtube(url)
-    # Mock source ID creation
-    source_id = 1 
+    if not path:
+        raise HTTPException(status_code=502, detail="Unable to download source audio")
+    source_id = db.create_source(url, "youtube", path, "processing")
     background_tasks.add_task(engine.process_audio_file, path, source_id)
     return {"status": "processing", "source_id": source_id}
 
@@ -74,6 +96,7 @@ def import_youtube(url: str, background_tasks: BackgroundTasks):
 @app.get("/api/dataset/stats")
 def stats():
     return db.get_stats()
+
 
 @app.get("/api/words/{word}")
 def get_word_variants(word: str):
