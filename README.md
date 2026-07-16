@@ -27,19 +27,22 @@ npm install
 npm run dev  
 ```
 Workflow:  
-    Go to Left Panel, paste a YouTube URL (e.g., a long interview).  
-    Wait for processing (check terminal logs).  
-    Go to Center Panel, type: "I am trying to reach you."  
-    Click GENERATE TRANSMISSION.  
-    Listen to the stitched, filtered result.  
-    Toggle "Robot Radio" filter off/on in Right Panel to hear the difference.  
 
-Future Expansion (Post-Hackathon)  
+1. Go to Left Panel, paste a YouTube URL (e.g., a long interview).  
+1. Wait for processing (check terminal logs).  
+1. Go to Center Panel, type: "I am trying to reach you."  
+1. Click GENERATE TRANSMISSION.  
+1. Listen to the stitched, filtered result.  
+1. Toggle "Robot Radio" filter off/on in Right Panel to hear the difference.  
 
-Phoneme Fallback: Integrate espeak-ng to generate missing words phonetically instead of silence.  
-Prosody Matching: Analyze pitch contour of surrounding words and pitch-shift the selected clip to match (using librosa.effects.pitch_shift).  
-TTS API Compatibility: Wrap the /generate endpoint to accept OpenAI-compatible JSON requests, allowing FrankenVoice to be dropped into any app that supports standard TTS APIs.  
+# WIP Expansion  
 
+1. Phoneme Fallback: Integrate espeak-ng to generate missing words phonetically instead of silence.  
+1. Prosody Matching: Analyze pitch contour of surrounding words and pitch-shift the selected clip to match (using librosa.effects.pitch_shift).  
+1. TTS API Compatibility: Wrap the /generate endpoint to accept OpenAI-compatible JSON requests, allowing FrankenVoice to be dropped into any app that supports standard TTS APIs.  
+
+
+# Folder layout structure
 ```
 frankenvoice/
 ├── backend/
