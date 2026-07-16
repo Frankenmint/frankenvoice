@@ -6,7 +6,7 @@
 
 **Local-first composite speech synthesis built from real recorded words.**
 
-<img src="../assets/hero.jpeg" alt="FrankenVoice Autostereogram" width="100%"/>
+![frankenvoice audio stereogram](https://github.com/Frankenmint/frankenvoice/blob/main/assets/hero.jpeg?raw=true)
 
 🕒 Average time to solve the hidden image: ~30 seconds
 
