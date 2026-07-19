@@ -1,4 +1,5 @@
 import io
+import re
 from contextlib import asynccontextmanager
 from typing import Literal, Optional
 
@@ -23,7 +24,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="FrankenVoice", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="FrankenVoice", version="0.4.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -40,6 +41,8 @@ class GenerateRequest(BaseModel):
     filter_preset: Literal["clean", "robot_radio", "telephone", "damaged_tape"] = (
         "robot_radio"
     )
+    speed: float = Field(default=1.0, ge=0.5, le=2.0)
+    pause_scale: float = Field(default=1.0, ge=0.25, le=3.0)
 
 
 class OpenAITTSRequest(BaseModel):
@@ -47,7 +50,7 @@ class OpenAITTSRequest(BaseModel):
     input: str = Field(min_length=1)
     voice: str = "default"
     response_format: Literal["wav", "mp3"] = "wav"
-    speed: float = Field(default=1.0, ge=0.25, le=4.0)
+    speed: float = Field(default=1.0, ge=0.5, le=2.0)
 
 
 class CoverageRequest(BaseModel):
@@ -56,15 +59,56 @@ class CoverageRequest(BaseModel):
 
 
 class EnrichmentRequest(CoverageRequest):
-    source_id: int
-
-
-class VoiceProfileRequest(BaseModel):
-    voice_id: str = Field(min_length=1)
+    pass
 
 
 class QwenTranscriptionRequest(BaseModel):
     audio_url: str = Field(min_length=1)
+
+
+class ConversationChunkRequest(BaseModel):
+    text: str = Field(min_length=1)
+    max_characters: int = Field(default=420, ge=120, le=1200)
+    skip_code_blocks: bool = True
+
+
+def clean_markdown_for_speech(text: str, skip_code_blocks: bool = True) -> str:
+    if skip_code_blocks:
+        text = re.sub(r"```.*?```", " ", text, flags=re.DOTALL)
+    else:
+        text = text.replace("```", " ")
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"https?://\S+", " ", text)
+    text = re.sub(r"^\s{0,3}#{1,6}\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*[-*+]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*\d+[.)]\s+", "", text, flags=re.MULTILINE)
+    text = text.replace("`", "")
+    text = re.sub(r"\s*\n\s*\n+\s*", "\n\n", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    return text.strip()
+
+
+def chunk_conversation(text: str, max_characters: int = 420) -> list[str]:
+    paragraphs = [part.strip() for part in re.split(r"\n\s*\n", text) if part.strip()]
+    chunks: list[str] = []
+    for paragraph in paragraphs:
+        sentences = [
+            sentence.strip()
+            for sentence in re.split(r"(?<=[.!?])\s+", paragraph)
+            if sentence.strip()
+        ] or [paragraph]
+        current = ""
+        for sentence in sentences:
+            candidate = f"{current} {sentence}".strip()
+            if current and len(candidate) > max_characters:
+                chunks.append(current)
+                current = sentence
+            else:
+                current = candidate
+        if current:
+            chunks.append(current)
+    return chunks
 
 
 @app.get("/health")
@@ -84,6 +128,8 @@ def generate_speech_endpoint(req: GenerateRequest):
         voice_id=req.voice_id,
         seed=req.seed,
         filter_preset=req.filter_preset,
+        speed=req.speed,
+        pause_scale=req.pause_scale,
     )
     return StreamingResponse(
         result.audio_buffer,
@@ -102,6 +148,7 @@ def openai_tts_endpoint(req: OpenAITTSRequest):
             text=req.input,
             voice_id=req.voice,
             filter_preset="robot_radio",
+            speed=req.speed,
         )
         audio_buffer = result.audio_buffer
         if req.response_format == "mp3":
@@ -122,6 +169,13 @@ def openai_tts_endpoint(req: OpenAITTSRequest):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@app.post("/api/conversation/chunks")
+def conversation_chunks(req: ConversationChunkRequest):
+    cleaned = clean_markdown_for_speech(req.text, req.skip_code_blocks)
+    chunks = chunk_conversation(cleaned, req.max_characters)
+    return {"cleaned_text": cleaned, "chunks": chunks, "count": len(chunks)}
+
+
 @app.post("/api/sources/youtube", status_code=202)
 def import_youtube(url: str, background_tasks: BackgroundTasks):
     path = engine.ingest_youtube(url)
@@ -140,14 +194,6 @@ def qwen_transcribe_source(source_id: int, req: QwenTranscriptionRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.put("/api/sources/{source_id}/voice-profile")
-def set_voice_profile(source_id: int, req: VoiceProfileRequest):
-    if not db.get_source(source_id):
-        raise HTTPException(status_code=404, detail="Source not found")
-    db.set_source_voice_profile(source_id, req.voice_id.strip())
-    return {"source_id": source_id, "voice_id": req.voice_id.strip()}
-
-
 @app.post("/api/dataset/coverage")
 def dataset_coverage(req: CoverageRequest):
     return coverage_for_text(req.text, req.target_variants)
@@ -155,14 +201,10 @@ def dataset_coverage(req: CoverageRequest):
 
 @app.post("/api/dataset/enrich")
 def dataset_enrich(req: EnrichmentRequest):
-    try:
-        return enrich_missing_words(
-            source_id=req.source_id,
-            words=tokenize(req.text),
-            target_variants=req.target_variants,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return enrich_missing_words(
+        words=tokenize(req.text),
+        target_variants=req.target_variants,
+    )
 
 
 @app.get("/api/dataset/stats")
