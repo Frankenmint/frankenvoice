@@ -75,7 +75,12 @@ export const enrichDataset = async (
     text,
     target_variants: targetVariants,
   });
-  return response.data;
+  return response.data as {
+    source_id: number;
+    voice_profile_id: string;
+    created: Array<{ word: string; clip_id: number }>;
+    failures: Array<{ word: string; reason: string }>;
+  };
 };
 
 export const setSourceVoiceProfile = async (sourceId: number, voiceId: string) => {
@@ -83,6 +88,17 @@ export const setSourceVoiceProfile = async (sourceId: number, voiceId: string) =
     voice_id: voiceId,
   });
   return response.data;
+};
+
+export const transcribeSourceWithQwen = async (sourceId: number, audioUrl: string) => {
+  const response = await axios.post(`${API_BASE}/api/sources/${sourceId}/qwen-transcribe`, {
+    audio_url: audioUrl,
+  });
+  return response.data as {
+    source_id: number;
+    provider: 'qwen_asr';
+    created: Array<{ word: string; clip_id: number }>;
+  };
 };
 
 export const getWordVariants = async (word: string) => {
