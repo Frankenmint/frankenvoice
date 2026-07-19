@@ -2,50 +2,86 @@ import axios from 'axios';
 
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
-export type GenerationProvider = 'qwen_cloud' | 'local';
-export type ProviderPreference = 'auto' | 'qwen_cloud' | 'local';
-
 export interface GeneratedSpeech {
   url: string;
-  provider: GenerationProvider;
-  fallbackReason?: string;
+  provider: 'composite';
 }
 
 export interface ProviderStatus {
-  default: ProviderPreference;
-  strategy: string;
-  qwen_cloud: {
+  speech_strategy: 'composite_only';
+  final_speech: {
+    provider: string;
+    whole_sentence_cloud_tts: false;
+  };
+  qwen_enrichment: {
     configured: boolean;
-    model: string;
-    voice: string;
-    endpoint: string;
+    asr_model: string;
+    tts_model: string;
+    strategy: string;
   };
-  local: {
-    available: boolean;
-  };
+}
+
+export interface CoverageWord {
+  word: string;
+  variants: number;
+  needed: number;
+}
+
+export interface CoverageResult {
+  target_variants: number;
+  complete: boolean;
+  words: CoverageWord[];
 }
 
 export const generateSpeech = async (
   text: string,
   seed?: number,
   filter = 'robot_radio',
-  provider: ProviderPreference = 'auto',
 ): Promise<GeneratedSpeech> => {
   const response = await axios.post(
     `${API_BASE}/api/speech/generate`,
-    { text, seed, filter_preset: filter, provider },
+    { text, seed, filter_preset: filter },
     { responseType: 'blob' },
   );
-  const providerHeader = response.headers['x-frankenvoice-provider'];
   return {
     url: URL.createObjectURL(response.data),
-    provider: providerHeader === 'qwen_cloud' ? 'qwen_cloud' : 'local',
-    fallbackReason: response.headers['x-frankenvoice-fallback'] || undefined,
+    provider: 'composite',
   };
 };
 
 export const getProviderStatus = async (): Promise<ProviderStatus> => {
   const response = await axios.get(`${API_BASE}/api/providers/status`);
+  return response.data;
+};
+
+export const getCoverage = async (
+  text: string,
+  targetVariants = 3,
+): Promise<CoverageResult> => {
+  const response = await axios.post(`${API_BASE}/api/dataset/coverage`, {
+    text,
+    target_variants: targetVariants,
+  });
+  return response.data;
+};
+
+export const enrichDataset = async (
+  sourceId: number,
+  text: string,
+  targetVariants = 3,
+) => {
+  const response = await axios.post(`${API_BASE}/api/dataset/enrich`, {
+    source_id: sourceId,
+    text,
+    target_variants: targetVariants,
+  });
+  return response.data;
+};
+
+export const setSourceVoiceProfile = async (sourceId: number, voiceId: string) => {
+  const response = await axios.put(`${API_BASE}/api/sources/${sourceId}/voice-profile`, {
+    voice_id: voiceId,
+  });
   return response.data;
 };
 
