@@ -8,7 +8,12 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from backend import db, engine
-from backend.enrichment import coverage_for_text, enrich_missing_words, tokenize
+from backend.enrichment import (
+    coverage_for_text,
+    enrich_missing_words,
+    tokenize,
+    transcribe_source_with_qwen,
+)
 from backend.speech_service import generate_composite_speech, get_provider_status
 
 
@@ -56,6 +61,10 @@ class EnrichmentRequest(CoverageRequest):
 
 class VoiceProfileRequest(BaseModel):
     voice_id: str = Field(min_length=1)
+
+
+class QwenTranscriptionRequest(BaseModel):
+    audio_url: str = Field(min_length=1)
 
 
 @app.get("/health")
@@ -121,6 +130,14 @@ def import_youtube(url: str, background_tasks: BackgroundTasks):
     source_id = db.create_source(url, "youtube", path, "processing")
     background_tasks.add_task(engine.process_audio_file, path, source_id)
     return {"status": "processing", "source_id": source_id}
+
+
+@app.post("/api/sources/{source_id}/qwen-transcribe")
+def qwen_transcribe_source(source_id: int, req: QwenTranscriptionRequest):
+    try:
+        return transcribe_source_with_qwen(source_id, req.audio_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.put("/api/sources/{source_id}/voice-profile")
