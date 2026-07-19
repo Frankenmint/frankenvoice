@@ -3,7 +3,6 @@ import { CloudCog, Link, LoaderCircle, Sparkles } from 'lucide-react';
 import {
   enrichDataset,
   importYouTubeSource,
-  setSourceVoiceProfile,
   transcribeSourceWithQwen,
 } from '../api';
 
@@ -11,7 +10,6 @@ export const SourceManager = () => {
   const [url, setUrl] = useState('');
   const [sourceId, setSourceId] = useState('');
   const [audioUrl, setAudioUrl] = useState('');
-  const [voiceId, setVoiceId] = useState('');
   const [words, setWords] = useState('');
   const [status, setStatus] = useState('Ready for source audio');
   const [loading, setLoading] = useState(false);
@@ -50,30 +48,16 @@ export const SourceManager = () => {
     }
   };
 
-  const handleVoiceProfile = async () => {
-    if (!numericSourceId || !voiceId.trim()) return;
-    setLoading(true);
-    try {
-      await setSourceVoiceProfile(numericSourceId, voiceId.trim());
-      setStatus(`Source #${numericSourceId} linked to Qwen voice ${voiceId.trim()}.`);
-    } catch (error) {
-      console.error(error);
-      setStatus('Could not save source voice profile.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleEnrich = async () => {
-    if (!numericSourceId || !words.trim()) return;
+    if (!words.trim()) return;
     setLoading(true);
-    setStatus('Qwen is generating missing words as separate clips…');
+    setStatus('Qwen is expanding the shared FrankenVoice vocabulary…');
     try {
-      const result = await enrichDataset(numericSourceId, words.trim(), 3);
-      setStatus(`Created ${result.created.length} derived word clips; ${result.failures.length} failed.`);
+      const result = await enrichDataset(words.trim(), 3);
+      setStatus(`Added ${result.created.length} clips to ${result.corpus}; ${result.failures.length} failed.`);
     } catch (error) {
       console.error(error);
-      setStatus('Enrichment failed. Add a valid source voice profile first.');
+      setStatus('Enrichment failed. Confirm the Qwen API key and voice list.');
     } finally {
       setLoading(false);
     }
@@ -103,20 +87,16 @@ export const SourceManager = () => {
       </section>
 
       <section className="space-y-3 border-t border-slate-800 pt-4">
-        <label className="block text-xs uppercase tracking-wider text-slate-500">Source ID</label>
-        <input
-          value={sourceId}
-          onChange={(event) => setSourceId(event.target.value)}
-          placeholder="1"
-          inputMode="numeric"
-          className={inputClass}
-        />
-      </section>
-
-      <section className="space-y-3 border-t border-slate-800 pt-4">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-sky-400">
           <CloudCog size={14} /> Qwen ASR
         </div>
+        <input
+          value={sourceId}
+          onChange={(event) => setSourceId(event.target.value)}
+          placeholder="Imported source ID"
+          inputMode="numeric"
+          className={inputClass}
+        />
         <input
           value={audioUrl}
           onChange={(event) => setAudioUrl(event.target.value)}
@@ -134,33 +114,23 @@ export const SourceManager = () => {
 
       <section className="space-y-3 border-t border-slate-800 pt-4">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-violet-400">
-          <Sparkles size={14} /> Missing-word enrichment
+          <Sparkles size={14} /> Global vocabulary enrichment
         </div>
-        <input
-          value={voiceId}
-          onChange={(event) => setVoiceId(event.target.value)}
-          placeholder="Qwen source voice profile ID"
-          className={inputClass}
-        />
-        <button
-          onClick={handleVoiceProfile}
-          disabled={loading || !numericSourceId || !voiceId.trim()}
-          className="w-full rounded-md border border-slate-700 px-3 py-2 text-sm font-semibold hover:bg-slate-800 disabled:opacity-40"
-        >
-          Save voice profile
-        </button>
+        <p className="text-xs leading-5 text-slate-500">
+          No speaker profile. Every generated word joins the same changing FrankenVoice corpus.
+        </p>
         <textarea
           value={words}
           onChange={(event) => setWords(event.target.value)}
-          placeholder="Paste target sentence or missing words"
-          className={`${inputClass} h-20 resize-none`}
+          placeholder="Paste target text or missing words"
+          className={`${inputClass} h-24 resize-none`}
         />
         <button
           onClick={handleEnrich}
-          disabled={loading || !numericSourceId || !words.trim()}
+          disabled={loading || !words.trim()}
           className="w-full rounded-md bg-violet-600 px-3 py-2 text-sm font-semibold hover:bg-violet-500 disabled:opacity-40"
         >
-          Generate separate word clips
+          Expand shared vocabulary
         </button>
       </section>
 
