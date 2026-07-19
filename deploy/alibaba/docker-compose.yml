@@ -1,0 +1,25 @@
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: deploy/alibaba/backend.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - frankenvoice_data:/app/data
+    expose:
+      - "8000"
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: deploy/alibaba/frontend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:8088:80"
+
+volumes:
+  frankenvoice_data:
