@@ -2,13 +2,13 @@
 
 ### *Look through the noise. Hear the voice inside it.*
 
-**Composite text-to-speech assembled one word at a time from many different sources.**
+**OpenAI-compatible composite text-to-speech assembled one word at a time from many different sources.**
 
 ![frankenvoice audio stereogram](https://github.com/Frankenmint/frankenvoice/blob/main/assets/hero.jpg?raw=true)
 
-# What is FrankenVoice?
+## What is FrankenVoice?
 
-FrankenVoice creates Bumblebee-style speech. Every word in the final sentence is an independently selected audio fragment.
+FrankenVoice creates Bumblebee-style speech. Every final word is an independently selected audio fragment from one shared global corpus. The same sentence can sound different every time.
 
 ```text
 "I am trying to reach you"
@@ -17,31 +17,33 @@ I       → source 3, clip 14
 am      → source 8, clip 2
 trying  → source 1, clip 9
 reach   → Qwen-derived single-word clip
-six independent clips → stitch → shared filter → WAV
+you     → source 5, clip 4
+
+five independent clips → punctuation-aware stitch → shared filter → WAV
 ```
 
-**Qwen never generates the final sentence.** Qwen Cloud is dataset-building compute:
+**Qwen never generates the final sentence.** Alibaba Cloud Model Studio is dataset-building compute:
 
-- Qwen ASR timestamps long-form source audio.
+- Qwen3-ASR timestamps long-form source audio.
 - FrankenVoice cuts those timestamps from the original recording into real word clips.
 - Coverage analysis finds missing or underrepresented words.
-- Qwen TTS generates only one missing word at a time with a source-specific voice profile.
-- Derived words are stored beside original clips with provenance metadata.
+- Qwen3-TTS generates isolated vocabulary variants for the shared corpus.
+- Derived clips are stored with `qwen_derived` provenance.
 - Final `/api/speech/generate` and `/v1/audio/speech` output always comes from the fragment composer.
 
 ## Pipeline
 
 ```text
 YouTube or audio source
-→ local audio extraction
+→ audio extraction
 → Qwen ASR or local Whisper timestamps
 → original word clips
-→ searchable SQLite dataset
+→ shared SQLite corpus
 → coverage analysis
-→ Qwen single-word gap filling
-→ independent clip selection per word
-→ stitching + shared transmission filter
-→ FrankenVoice WAV
+→ Qwen isolated-word enrichment
+→ source-diverse clip selection per word
+→ punctuation-aware stitching + shared filter
+→ FrankenVoice WAV / MP3
 ```
 
 ## Requirements
@@ -50,7 +52,7 @@ YouTube or audio source
 - Python 3.11+
 - FFmpeg
 - `yt-dlp`
-- `espeak-ng` for last-resort single-word fallback
+- `espeak-ng` for last-resort isolated-word fallback
 - Rubber Band CLI for optional prosody matching
 - Alibaba Cloud Model Studio API key for Qwen enrichment
 
@@ -60,6 +62,7 @@ YouTube or audio source
 export DASHSCOPE_API_KEY="sk-your-key"
 export QWEN_ASR_MODEL="qwen3-asr-flash"
 export QWEN_TTS_MODEL="qwen3-tts-flash"
+export QWEN_TTS_VOICES="Cherry"
 ```
 
 See `.env.example` for endpoints and timeout settings.
@@ -99,15 +102,11 @@ curl -X POST http://localhost:8000/api/speech/generate \
   -H "Content-Type: application/json" \
   -d '{
     "text": "I am trying to reach you through this damaged transmission.",
-    "filter_preset": "robot_radio"
+    "filter_preset": "robot_radio",
+    "speed": 1.0,
+    "pause_scale": 1.0
   }' \
   --output frankenvoice.wav
-```
-
-The response includes:
-
-```text
-X-FrankenVoice-Provider: composite
 ```
 
 ### Check vocabulary coverage
@@ -118,39 +117,26 @@ curl -X POST http://localhost:8000/api/dataset/coverage \
   -d '{"text":"I am trying to reach you","target_variants":3}'
 ```
 
-### Qwen ASR source processing
-
-Import a source first, then supply a directly reachable audio URL for Qwen ASR:
-
-```bash
-curl -X POST http://localhost:8000/api/sources/1/qwen-transcribe \
-  -H "Content-Type: application/json" \
-  -d '{"audio_url":"https://example.com/source.wav"}'
-```
-
-Qwen returns word timestamps; FrankenVoice cuts the matching words from its local copy of the original recording.
-
-### Link a source voice profile
-
-```bash
-curl -X PUT http://localhost:8000/api/sources/1/voice-profile \
-  -H "Content-Type: application/json" \
-  -d '{"voice_id":"source-voice-profile-id"}'
-```
-
-### Fill missing words
+### Enrich the shared corpus
 
 ```bash
 curl -X POST http://localhost:8000/api/dataset/enrich \
   -H "Content-Type: application/json" \
   -d '{
-    "source_id":1,
-    "text":"reach transmission",
+    "text":"reach transmission navigation",
     "target_variants":3
   }'
 ```
 
-Each generated item is a separate reusable word clip marked `qwen_derived`.
+Each generated item is a separate reusable clip in the global `Qwen Derived Corpus`.
+
+### Conversation Reader
+
+```text
+POST /api/conversation/chunks
+```
+
+The frontend cleans Markdown, splits long responses into short chunks, prefetches upcoming audio, and provides play, pause, replay, skip, stop, progress, and cancellation controls.
 
 ## OpenAI-compatible endpoint
 
@@ -158,7 +144,7 @@ Each generated item is a separate reusable word clip marked `qwen_derived`.
 POST /v1/audio/speech
 ```
 
-It behaves like a TTS service, but its audio is still assembled word-by-word by FrankenVoice.
+The endpoint accepts OpenAI-style TTS requests, but `voice` is intentionally ignored because FrankenVoice is one changing composite voice.
 
 ## Frontend
 
@@ -169,12 +155,17 @@ npm run dev
 
 UI: `http://localhost:5173`
 
-The UI separates:
+## Alibaba Cloud deployment
 
-- **Composite generation** — always the final speech path
-- **Qwen ASR** — builds original clips from source timestamps
-- **Coverage checking** — identifies missing variants
-- **Qwen enrichment** — creates missing single-word clips
+A reproducible Alibaba ECS deployment package is included at:
+
+```text
+deploy/alibaba/
+```
+
+It contains Dockerfiles, Docker Compose, same-origin Nginx proxy configuration, an environment template, architecture notes, and submission verification URLs.
+
+See [Alibaba Cloud deployment proof](deploy/alibaba/README.md).
 
 ## QA
 
@@ -188,9 +179,13 @@ npm run build
 
 CI uses mocks and never requires a real cloud key.
 
-## Current WIP
+## License
 
-- Automated Qwen voice-profile creation from clean source excerpts
+FrankenVoice is released under the [MIT License](LICENSE).
+
+## Future work
+
+- Personal voice-cloning fork after the hackathon
 - Per-word reroll wired to backend clip IDs
 - Source job progress polling
 - Waveform editing
