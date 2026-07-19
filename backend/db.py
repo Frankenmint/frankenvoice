@@ -1,7 +1,7 @@
 import hashlib
 import sqlite3
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = PROJECT_ROOT / "data" / "metadata.sqlite"
@@ -14,6 +14,12 @@ def get_connection() -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, name: str, ddl: str) -> None:
+    columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if name not in columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
 
 
 def init_db() -> None:
@@ -60,6 +66,10 @@ def init_db() -> None:
             );
             """
         )
+        _ensure_column(conn, "sources", "qwen_voice_id", "TEXT")
+        _ensure_column(conn, "sources", "transcription_provider", "TEXT")
+        _ensure_column(conn, "clips", "provenance", "TEXT DEFAULT 'original'")
+        _ensure_column(conn, "clips", "voice_profile_id", "TEXT")
 
 
 def create_source(
@@ -84,6 +94,27 @@ def update_source_status(source_id: int, status: str) -> None:
         conn.execute("UPDATE sources SET status = ? WHERE id = ?", (status, source_id))
 
 
+def set_source_voice_profile(source_id: int, voice_id: str) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE sources SET qwen_voice_id = ? WHERE id = ?", (voice_id, source_id)
+        )
+
+
+def set_source_transcription_provider(source_id: int, provider: str) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE sources SET transcription_provider = ? WHERE id = ?",
+            (provider, source_id),
+        )
+
+
+def get_source(source_id: int) -> Optional[Dict]:
+    with get_connection() as conn:
+        row = conn.execute("SELECT * FROM sources WHERE id = ?", (source_id,)).fetchone()
+    return dict(row) if row else None
+
+
 def get_clip_path_hash(word: str, source_id: int, start_time: float) -> str:
     unique_string = f"{word}_{source_id}_{start_time}"
     hash_hex = hashlib.md5(unique_string.encode(), usedforsecurity=False).hexdigest()
@@ -103,8 +134,8 @@ def add_clip(clip_data: Dict) -> int:
             INSERT INTO clips (
                 word, normalized_word, source_id, start_time, end_time,
                 file_path, confidence, duration_ms, pitch_hz, loudness_lufs,
-                context_before, context_after
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                context_before, context_after, provenance, voice_profile_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 clip_data["word"],
@@ -113,12 +144,14 @@ def add_clip(clip_data: Dict) -> int:
                 clip_data["start"],
                 clip_data["end"],
                 str(canonical_path),
-                clip_data["confidence"],
+                clip_data.get("confidence", 1.0),
                 clip_data["duration"],
                 clip_data.get("pitch"),
                 clip_data.get("loudness"),
                 clip_data.get("ctx_before"),
                 clip_data.get("ctx_after"),
+                clip_data.get("provenance", "original"),
+                clip_data.get("voice_profile_id"),
             ),
         )
         return int(cursor.lastrowid)
@@ -138,10 +171,37 @@ def get_clips_for_word(word: str, limit: int = 50) -> List[Dict]:
     return [dict(row) for row in rows]
 
 
+def get_word_counts(words: List[str]) -> Dict[str, int]:
+    normalized = sorted({word.lower() for word in words if word.strip()})
+    if not normalized:
+        return {}
+    placeholders = ",".join("?" for _ in normalized)
+    with get_connection() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT normalized_word, COUNT(*) AS clip_count
+            FROM clips
+            WHERE disabled = 0 AND normalized_word IN ({placeholders})
+            GROUP BY normalized_word
+            """,
+            normalized,
+        ).fetchall()
+    counts = {word: 0 for word in normalized}
+    counts.update({row["normalized_word"]: int(row["clip_count"]) for row in rows})
+    return counts
+
+
 def get_stats() -> Dict[str, int]:
     with get_connection() as conn:
         total_clips = conn.execute("SELECT COUNT(*) FROM clips").fetchone()[0]
         unique_words = conn.execute(
             "SELECT COUNT(DISTINCT normalized_word) FROM clips"
         ).fetchone()[0]
-    return {"total_clips": total_clips, "unique_words": unique_words}
+        derived_clips = conn.execute(
+            "SELECT COUNT(*) FROM clips WHERE provenance = 'qwen_derived'"
+        ).fetchone()[0]
+    return {
+        "total_clips": total_clips,
+        "unique_words": unique_words,
+        "derived_clips": derived_clips,
+    }
