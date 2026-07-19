@@ -12,11 +12,13 @@ export interface ProviderStatus {
   final_speech: {
     provider: string;
     whole_sentence_cloud_tts: false;
+    voice_count: 1;
   };
   qwen_enrichment: {
     configured: boolean;
     asr_model: string;
     tts_model: string;
+    voices: string[];
     strategy: string;
   };
 }
@@ -33,15 +35,24 @@ export interface CoverageResult {
   words: CoverageWord[];
 }
 
+export interface ConversationChunks {
+  cleaned_text: string;
+  chunks: string[];
+  count: number;
+}
+
 export const generateSpeech = async (
   text: string,
   seed?: number,
   filter = 'robot_radio',
+  speed = 1,
+  pauseScale = 1,
+  signal?: AbortSignal,
 ): Promise<GeneratedSpeech> => {
   const response = await axios.post(
     `${API_BASE}/api/speech/generate`,
-    { text, seed, filter_preset: filter },
-    { responseType: 'blob' },
+    { text, seed, filter_preset: filter, speed, pause_scale: pauseScale },
+    { responseType: 'blob', signal },
   );
   return {
     url: URL.createObjectURL(response.data),
@@ -65,27 +76,28 @@ export const getCoverage = async (
   return response.data;
 };
 
-export const enrichDataset = async (
-  sourceId: number,
-  text: string,
-  targetVariants = 3,
-) => {
+export const enrichDataset = async (text: string, targetVariants = 3) => {
   const response = await axios.post(`${API_BASE}/api/dataset/enrich`, {
-    source_id: sourceId,
     text,
     target_variants: targetVariants,
   });
   return response.data as {
     source_id: number;
-    voice_profile_id: string;
-    created: Array<{ word: string; clip_id: number }>;
+    corpus: string;
+    created: Array<{ word: string; clip_id: number; voice: string }>;
     failures: Array<{ word: string; reason: string }>;
   };
 };
 
-export const setSourceVoiceProfile = async (sourceId: number, voiceId: string) => {
-  const response = await axios.put(`${API_BASE}/api/sources/${sourceId}/voice-profile`, {
-    voice_id: voiceId,
+export const prepareConversation = async (
+  text: string,
+  maxCharacters = 420,
+  skipCodeBlocks = true,
+): Promise<ConversationChunks> => {
+  const response = await axios.post(`${API_BASE}/api/conversation/chunks`, {
+    text,
+    max_characters: maxCharacters,
+    skip_code_blocks: skipCodeBlocks,
   });
   return response.data;
 };

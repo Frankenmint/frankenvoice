@@ -124,12 +124,18 @@ def process_audio_file(file_path: str, source_id: int) -> None:
         raise
 
 
-def rank_clips(clips: list, recently_used: list, rng: random.Random):
+def rank_clips(
+    clips: list,
+    recently_used: list[int],
+    recent_sources: list[int],
+    rng: random.Random,
+):
     if not clips:
         return None
-    available = [clip for clip in clips if clip["id"] not in recently_used] or clips
-    available.sort(key=lambda clip: clip.get("confidence") or 0.0, reverse=True)
-    return rng.choice(available[: min(3, len(available))])
+    unused = [clip for clip in clips if clip["id"] not in recently_used] or clips
+    diverse = [clip for clip in unused if clip.get("source_id") not in recent_sources] or unused
+    diverse.sort(key=lambda clip: clip.get("confidence") or 0.0, reverse=True)
+    return rng.choice(diverse[: min(5, len(diverse))])
 
 
 def _audio_segment_from_float(samples: np.ndarray, sr: int = 16000) -> AudioSegment:
@@ -139,22 +145,50 @@ def _audio_segment_from_float(samples: np.ndarray, sr: int = 16000) -> AudioSegm
     )
 
 
+def _pause_for(separator: str, rng: random.Random, pause_scale: float) -> int:
+    if "\n\n" in separator:
+        base = rng.randint(550, 850)
+    elif re.search(r"[.!?]", separator):
+        base = rng.randint(280, 450)
+    elif re.search(r"[:;]", separator):
+        base = rng.randint(160, 240)
+    elif "," in separator:
+        base = rng.randint(100, 180)
+    else:
+        base = rng.randint(30, 80)
+    return max(0, int(base * pause_scale))
+
+
+def _apply_speed(audio: AudioSegment, speed: float) -> AudioSegment:
+    if abs(speed - 1.0) < 0.01:
+        return audio
+    altered = audio._spawn(
+        audio.raw_data,
+        overrides={"frame_rate": max(1000, int(audio.frame_rate * speed))},
+    )
+    return altered.set_frame_rate(16000)
+
+
 def generate_speech(
     text: str,
     voice_id: str = "default",
     seed: Optional[int] = None,
     filter_preset: str = "robot_radio",
+    speed: float = 1.0,
+    pause_scale: float = 1.0,
 ):
     del voice_id
     rng = random.Random(seed)
-    tokens = re.findall(r"[A-Za-z0-9']+", text)
+    matches = list(re.finditer(r"[A-Za-z0-9']+", text))
     final_audio = AudioSegment.silent(duration=0, frame_rate=16000)
     last_clip_path: Optional[Path] = None
-    recently_used = []
+    recently_used: list[int] = []
+    recent_sources: list[int] = []
 
-    for token in tokens:
+    for index, match in enumerate(matches):
+        token = match.group(0)
         clips = db.get_clips_for_word(token.lower())
-        selected_clip = rank_clips(clips, recently_used, rng)
+        selected_clip = rank_clips(clips, recently_used, recent_sources, rng)
         seg = None
 
         if selected_clip:
@@ -169,19 +203,26 @@ def generate_speech(
                     seg = AudioSegment.from_wav(clip_path)
                 last_clip_path = clip_path
                 recently_used.append(selected_clip["id"])
-                recently_used = recently_used[-10:]
+                recently_used = recently_used[-12:]
+                source_id = selected_clip.get("source_id")
+                if source_id is not None:
+                    recent_sources.append(source_id)
+                    recent_sources = recent_sources[-2:]
 
         if seg is None:
             seg = generate_espeak_fallback(token)
             last_clip_path = None
 
+        next_start = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        separator = text[match.end():next_start]
         final_audio += seg + AudioSegment.silent(
-            duration=rng.randint(30, 80), frame_rate=16000
+            duration=_pause_for(separator, rng, pause_scale), frame_rate=16000
         )
 
     if len(final_audio) == 0:
         final_audio = AudioSegment.silent(duration=100, frame_rate=16000)
     final_audio = apply_filter_chain(final_audio, filter_preset)
+    final_audio = _apply_speed(final_audio, min(2.0, max(0.5, speed)))
 
     out_buf = io.BytesIO()
     final_audio.export(out_buf, format="wav")

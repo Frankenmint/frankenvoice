@@ -18,6 +18,8 @@ def generate_composite_speech(
     voice_id: str = "default",
     seed: Optional[int] = None,
     filter_preset: str = "robot_radio",
+    speed: float = 1.0,
+    pause_scale: float = 1.0,
 ) -> GenerationResult:
     """Always synthesize final speech from independently selected word clips."""
     return GenerationResult(
@@ -26,6 +28,8 @@ def generate_composite_speech(
             voice_id=voice_id,
             seed=seed,
             filter_preset=filter_preset,
+            speed=speed,
+            pause_scale=pause_scale,
         )
     )
 
@@ -37,11 +41,13 @@ def get_provider_status() -> dict:
         "final_speech": {
             "provider": "frankenvoice_fragment_engine",
             "whole_sentence_cloud_tts": False,
+            "voice_count": 1,
         },
         "qwen_enrichment": {
             "configured": config.configured,
             "asr_model": config.asr_model,
             "tts_model": config.tts_model,
-            "strategy": "transcribe_sources_and_fill_missing_words",
+            "voices": list(config.voices),
+            "strategy": "transcribe_sources_and_expand_shared_vocabulary",
         },
     }
