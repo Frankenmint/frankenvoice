@@ -29,6 +29,7 @@ class QwenCloudConfig:
     tts_endpoint: str = DEFAULT_TTS_ENDPOINT
     asr_model: str = "qwen3-asr-flash"
     tts_model: str = "qwen3-tts-flash"
+    voices: tuple[str, ...] = ("Cherry",)
     language_type: str = "English"
     timeout_seconds: float = 45.0
 
@@ -38,6 +39,11 @@ class QwenCloudConfig:
             timeout = max(1.0, float(os.getenv("QWEN_TIMEOUT_SECONDS", "45")))
         except ValueError:
             timeout = 45.0
+        voices = tuple(
+            voice.strip()
+            for voice in os.getenv("QWEN_TTS_VOICES", "Cherry").split(",")
+            if voice.strip()
+        ) or ("Cherry",)
         return cls(
             api_key=os.getenv("DASHSCOPE_API_KEY", "").strip(),
             asr_endpoint=os.getenv("QWEN_ASR_ENDPOINT", DEFAULT_ASR_ENDPOINT).strip()
@@ -48,6 +54,7 @@ class QwenCloudConfig:
             or "qwen3-asr-flash",
             tts_model=os.getenv("QWEN_TTS_MODEL", "qwen3-tts-flash").strip()
             or "qwen3-tts-flash",
+            voices=voices,
             language_type=os.getenv("QWEN_LANGUAGE", "English").strip() or "English",
             timeout_seconds=timeout,
         )
@@ -150,23 +157,24 @@ def transcribe_audio_url(
 
 def synthesize_word(
     word: str,
-    voice_id: str,
+    voice_id: Optional[str] = None,
     config: Optional[QwenCloudConfig] = None,
 ) -> AudioSegment:
-    """Generate exactly one reusable word clip for a source-specific Qwen voice."""
+    """Generate exactly one reusable word for the shared FrankenVoice corpus."""
     config = config or QwenCloudConfig.from_env()
     normalized = word.strip()
     if not normalized or len(normalized.split()) != 1:
         raise QwenCloudError("Derived clip synthesis accepts exactly one word")
     if not config.configured:
         raise QwenCloudError("DASHSCOPE_API_KEY is not configured")
-    if not voice_id.strip():
-        raise QwenCloudError("A source voice profile is required")
+    voice = (voice_id or config.voices[0]).strip()
+    if not voice:
+        raise QwenCloudError("Qwen TTS voice configuration is empty")
     body = {
         "model": config.tts_model,
         "input": {
             "text": normalized,
-            "voice": voice_id,
+            "voice": voice,
             "language_type": config.language_type,
         },
     }
