@@ -4,7 +4,7 @@
 
 **Composite text-to-speech assembled one word at a time from many different sources.**
 
-![frankenvoice audio stereogram](https://github.com/Frankenmint/frankenvoice/blob/main/assets/hero.jpeg?raw=true)
+![frankenvoice audio stereogram](https://github.com/Frankenmint/frankenvoice/blob/main/assets/hero.jpg?raw=true)
 
 # What is FrankenVoice?
 
