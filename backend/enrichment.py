@@ -3,8 +3,10 @@ import time
 from pathlib import Path
 from typing import Iterable
 
+from pydub import AudioSegment
+
 from backend import db
-from backend.qwen_cloud import QwenCloudError, synthesize_word
+from backend.qwen_cloud import QwenCloudError, synthesize_word, transcribe_audio_url
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -29,6 +31,65 @@ def coverage_for_text(text: str, target_variants: int = 3) -> dict:
         "complete": all(row["needed"] == 0 for row in rows),
         "words": rows,
     }
+
+
+def transcribe_source_with_qwen(source_id: int, audio_url: str) -> dict:
+    """Use Qwen for timestamps, then cut real words from the local source recording."""
+    source = db.get_source(source_id)
+    if not source:
+        raise ValueError(f"Source {source_id} does not exist")
+    source_path = Path(source["file_path"])
+    if not source_path.is_absolute():
+        source_path = PROJECT_ROOT / source_path
+    if not source_path.exists():
+        raise ValueError("Local source audio is unavailable")
+
+    rows = transcribe_audio_url(audio_url)
+    recording = AudioSegment.from_file(source_path).set_channels(1).set_frame_rate(16000)
+    created: list[dict] = []
+
+    for row in rows:
+        word = str(row.get("word", "")).strip()
+        normalized = tokenize(word)
+        if not normalized:
+            continue
+        try:
+            start = max(0.0, float(row.get("start", 0.0)))
+            end = max(start, float(row.get("end", start)))
+            confidence = float(row.get("confidence", 1.0))
+        except (TypeError, ValueError):
+            continue
+        if end <= start:
+            continue
+
+        padded_start_ms = max(0, int((start - 0.05) * 1000))
+        padded_end_ms = min(len(recording), int((end + 0.05) * 1000))
+        segment = recording[padded_start_ms:padded_end_ms]
+        if len(segment) < 80:
+            continue
+
+        canonical_word = normalized[0]
+        rel_path = db.get_clip_path_hash(canonical_word, source_id, start)
+        full_path = PROJECT_ROOT / "data" / "dataset" / "clips" / f"{rel_path}.wav"
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        segment.export(full_path, format="wav")
+        clip_id = db.add_clip(
+            {
+                "word": word,
+                "normalized_word": canonical_word,
+                "source_id": source_id,
+                "start": start,
+                "end": end,
+                "confidence": confidence,
+                "duration": len(segment),
+                "provenance": "original",
+            }
+        )
+        created.append({"word": canonical_word, "clip_id": clip_id})
+
+    db.set_source_transcription_provider(source_id, "qwen_asr")
+    db.update_source_status(source_id, "complete")
+    return {"source_id": source_id, "provider": "qwen_asr", "created": created}
 
 
 def enrich_missing_words(
