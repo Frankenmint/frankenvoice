@@ -2,44 +2,47 @@
 
 ### *Look through the noise. Hear the voice inside it.*
 
-**Qwen Cloud-first speech generation with automatic local composite fallback.**
+**Composite text-to-speech assembled one word at a time from many different sources.**
 
 ![frankenvoice audio stereogram](https://github.com/Frankenmint/frankenvoice/blob/main/assets/hero.jpeg?raw=true)
 
 # What is FrankenVoice?
 
-FrankenVoice builds voices from fragments instead of relying on one synthesis path.
-
-Default generation strategy:
+FrankenVoice creates Bumblebee-style speech. Every word in the final sentence is an independently selected audio fragment.
 
 ```text
-Text
-→ Qwen3-TTS on Alibaba Cloud Model Studio
-→ shared FrankenVoice transmission filter
-→ WAV
+"I am trying to reach you"
 
-Any missing key, timeout, API failure, or unusable cloud response
-→ local indexed word clips
-→ espeak-ng for missing words
-→ shared FrankenVoice transmission filter
-→ WAV
+I       → source 3, clip 14
+am      → source 8, clip 2
+trying  → source 1, clip 9
+reach   → Qwen-derived single-word clip
+six independent clips → stitch → shared filter → WAV
 ```
 
-Long-form recordings still become the reusable local voice dataset:
+**Qwen never generates the final sentence.** Qwen Cloud is dataset-building compute:
 
-- Transcribe recordings with local Whisper
-- Extract word-level clips
-- Build a searchable SQLite dataset
-- Stitch real recorded words into new sentences
-- Keep generation available when cloud access fails
+- Qwen ASR timestamps long-form source audio.
+- FrankenVoice cuts those timestamps from the original recording into real word clips.
+- Coverage analysis finds missing or underrepresented words.
+- Qwen TTS generates only one missing word at a time with a source-specific voice profile.
+- Derived words are stored beside original clips with provenance metadata.
+- Final `/api/speech/generate` and `/v1/audio/speech` output always comes from the fragment composer.
 
-## Why Qwen Cloud-first?
+## Pipeline
 
-Qwen3-TTS performs primary speech generation. FrankenVoice keeps its fragment engine as a resilient, private fallback. Every API response reports which provider produced the audio through:
-
-- `X-FrankenVoice-Provider: qwen_cloud`
-- `X-FrankenVoice-Provider: local`
-- `X-FrankenVoice-Fallback: <reason>` when cloud generation falls back
+```text
+YouTube or audio source
+→ local audio extraction
+→ Qwen ASR or local Whisper timestamps
+→ original word clips
+→ searchable SQLite dataset
+→ coverage analysis
+→ Qwen single-word gap filling
+→ independent clip selection per word
+→ stitching + shared transmission filter
+→ FrankenVoice WAV
+```
 
 ## Requirements
 
@@ -47,28 +50,19 @@ Qwen3-TTS performs primary speech generation. FrankenVoice keeps its fragment en
 - Python 3.11+
 - FFmpeg
 - `yt-dlp`
-- `espeak-ng` for missing-word local fallback
-- Rubber Band CLI for optional local prosody matching
-- Alibaba Cloud Model Studio API key for Qwen Cloud generation
+- `espeak-ng` for last-resort single-word fallback
+- Rubber Band CLI for optional prosody matching
+- Alibaba Cloud Model Studio API key for Qwen enrichment
 
-## Qwen Cloud configuration
-
-Copy `.env.example` values into your shell or local environment:
+## Qwen configuration
 
 ```bash
 export DASHSCOPE_API_KEY="sk-your-key"
+export QWEN_ASR_MODEL="qwen3-asr-flash"
 export QWEN_TTS_MODEL="qwen3-tts-flash"
-export QWEN_TTS_VOICE="Cherry"
-export QWEN_TTS_LANGUAGE="English"
 ```
 
-Default endpoint uses Alibaba Cloud Model Studio's Singapore endpoint. For a workspace-specific endpoint:
-
-```bash
-export QWEN_TTS_ENDPOINT="https://YOUR_WORKSPACE_ID.ap-southeast-1.maas.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
-```
-
-Cloud configuration remains optional. Without a key, `provider=auto` immediately uses the local fragment engine.
+See `.env.example` for endpoints and timeout settings.
 
 Provider status:
 
@@ -76,9 +70,18 @@ Provider status:
 curl http://localhost:8000/api/providers/status
 ```
 
-## Backend
+Expected strategy:
 
-From repository root:
+```json
+{
+  "speech_strategy": "composite_only",
+  "final_speech": {
+    "whole_sentence_cloud_tts": false
+  }
+}
+```
+
+## Backend
 
 ```bash
 python -m venv .venv
@@ -89,33 +92,73 @@ uvicorn backend.app:app --reload
 
 API: `http://localhost:8000`
 
-Health check:
-
-```bash
-curl http://localhost:8000/health
-```
-
-Generate using cloud-first automatic fallback:
+### Generate composite speech
 
 ```bash
 curl -X POST http://localhost:8000/api/speech/generate \
   -H "Content-Type: application/json" \
   -d '{
     "text": "I am trying to reach you through this damaged transmission.",
-    "provider": "auto",
     "filter_preset": "robot_radio"
   }' \
   --output frankenvoice.wav
 ```
 
-Force local generation:
+The response includes:
 
-```json
-{
-  "text": "Buffalo buffalo Buffalo buffalo.",
-  "provider": "local"
-}
+```text
+X-FrankenVoice-Provider: composite
 ```
+
+### Check vocabulary coverage
+
+```bash
+curl -X POST http://localhost:8000/api/dataset/coverage \
+  -H "Content-Type: application/json" \
+  -d '{"text":"I am trying to reach you","target_variants":3}'
+```
+
+### Qwen ASR source processing
+
+Import a source first, then supply a directly reachable audio URL for Qwen ASR:
+
+```bash
+curl -X POST http://localhost:8000/api/sources/1/qwen-transcribe \
+  -H "Content-Type: application/json" \
+  -d '{"audio_url":"https://example.com/source.wav"}'
+```
+
+Qwen returns word timestamps; FrankenVoice cuts the matching words from its local copy of the original recording.
+
+### Link a source voice profile
+
+```bash
+curl -X PUT http://localhost:8000/api/sources/1/voice-profile \
+  -H "Content-Type: application/json" \
+  -d '{"voice_id":"source-voice-profile-id"}'
+```
+
+### Fill missing words
+
+```bash
+curl -X POST http://localhost:8000/api/dataset/enrich \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source_id":1,
+    "text":"reach transmission",
+    "target_variants":3
+  }'
+```
+
+Each generated item is a separate reusable word clip marked `qwen_derived`.
+
+## OpenAI-compatible endpoint
+
+```text
+POST /v1/audio/speech
+```
+
+It behaves like a TTS service, but its audio is still assembled word-by-word by FrankenVoice.
 
 ## Frontend
 
@@ -126,27 +169,12 @@ npm run dev
 
 UI: `http://localhost:5173`
 
-Set a different backend URL with:
+The UI separates:
 
-```bash
-VITE_API_BASE_URL=http://localhost:8000 npm run dev
-```
-
-UI reports:
-
-- whether Qwen Cloud is configured
-- Qwen model selected
-- provider used for each generation
-- reason local fallback was activated
-
-## OpenAI-compatible endpoint
-
-```text
-POST /v1/audio/speech
-```
-
-- `model: frankenvoice-1` → Qwen Cloud first, local fallback
-- `model: frankenvoice-local` → local fragment engine only
+- **Composite generation** — always the final speech path
+- **Qwen ASR** — builds original clips from source timestamps
+- **Coverage checking** — identifies missing variants
+- **Qwen enrichment** — creates missing single-word clips
 
 ## QA
 
@@ -158,13 +186,12 @@ npm install
 npm run build
 ```
 
-Cloud tests use mocks. CI never requires or exposes a real API key.
+CI uses mocks and never requires a real cloud key.
 
 ## Current WIP
 
+- Automated Qwen voice-profile creation from clean source excerpts
 - Per-word reroll wired to backend clip IDs
-- Cloud-generated fallback words mixed into local fragment sentences
-- Voice dataset filtering
-- Source job progress
+- Source job progress polling
 - Waveform editing
-- Expanded OpenAI-compatible response formats
+- Better syllable fallback for words that cannot be generated
