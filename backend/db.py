@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = PROJECT_ROOT / "data" / "metadata.sqlite"
+DERIVED_SOURCE_TITLE = "Qwen Derived Corpus"
 
 
 def get_connection() -> sqlite3.Connection:
@@ -85,6 +86,24 @@ def create_source(
             VALUES (?, ?, ?, ?)
             """,
             (title, source_type, file_path, status),
+        )
+        return int(cursor.lastrowid)
+
+
+def get_or_create_derived_source() -> int:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id FROM sources WHERE title = ? AND source_type = 'qwen_derived'",
+            (DERIVED_SOURCE_TITLE,),
+        ).fetchone()
+        if row:
+            return int(row["id"])
+        cursor = conn.execute(
+            """
+            INSERT INTO sources (title, source_type, file_path, status, transcription_provider)
+            VALUES (?, 'qwen_derived', '', 'complete', 'qwen_tts')
+            """,
+            (DERIVED_SOURCE_TITLE,),
         )
         return int(cursor.lastrowid)
 
