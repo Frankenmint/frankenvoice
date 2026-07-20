@@ -37,7 +37,7 @@ def ingest_youtube(url: str) -> Optional[str]:
     cmd = [
         "yt-dlp",
         "--js-runtimes",
-        "deno",
+        "deno:/usr/local/deno/bin/deno",
         "--remote-components",
         "ejs:github",
     ]
