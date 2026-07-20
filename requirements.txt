@@ -3,7 +3,7 @@ uvicorn
 python-multipart
 sqlalchemy
 faster-whisper
-yt-dlp
+yt-dlp[default]
 pydub
 librosa
 numpy
