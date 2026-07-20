@@ -5,10 +5,10 @@ from typing import Literal, Optional
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from backend import db, engine
+from backend import autopilot, db, engine
 from backend.enrichment import (
     coverage_for_text,
     enrich_missing_words,
@@ -24,7 +24,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="FrankenVoice", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="FrankenVoice", version="0.5.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -70,6 +70,18 @@ class ConversationChunkRequest(BaseModel):
     text: str = Field(min_length=1)
     max_characters: int = Field(default=420, ge=120, le=1200)
     skip_code_blocks: bool = True
+
+
+class AutopilotPlanRequest(BaseModel):
+    goal: str = Field(min_length=3)
+    target_text: str = Field(min_length=1)
+    source_urls: list[str] = Field(default_factory=list, max_length=10)
+    target_variants: int = Field(default=3, ge=1, le=10)
+
+
+class AutopilotApprovalRequest(BaseModel):
+    allow_source_imports: bool = False
+    allow_cloud_enrichment: bool = True
 
 
 def clean_markdown_for_speech(text: str, skip_code_blocks: bool = True) -> str:
@@ -119,6 +131,57 @@ def health() -> dict:
 @app.get("/api/providers/status")
 def provider_status() -> dict:
     return get_provider_status()
+
+
+@app.post("/api/autopilot/plan")
+def autopilot_plan(req: AutopilotPlanRequest):
+    try:
+        return autopilot.create_run(
+            goal=req.goal,
+            target_text=req.target_text,
+            source_urls=req.source_urls,
+            target_variants=req.target_variants,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@app.get("/api/autopilot/runs/{run_id}")
+def autopilot_run(run_id: str):
+    try:
+        return autopilot.get_run(run_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.post("/api/autopilot/runs/{run_id}/approve", status_code=202)
+def autopilot_approve(
+    run_id: str,
+    req: AutopilotApprovalRequest,
+    background_tasks: BackgroundTasks,
+):
+    try:
+        run = autopilot.approve_run(
+            run_id=run_id,
+            allow_source_imports=req.allow_source_imports,
+            allow_cloud_enrichment=req.allow_cloud_enrichment,
+        )
+        background_tasks.add_task(autopilot.execute_run, run_id)
+        return run
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/autopilot/runs/{run_id}/audio")
+def autopilot_audio(run_id: str):
+    try:
+        return FileResponse(
+            autopilot.audio_path_for_run(run_id),
+            media_type="audio/wav",
+            filename=f"frankenvoice-autopilot-{run_id}.wav",
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @app.post("/api/speech/generate")
