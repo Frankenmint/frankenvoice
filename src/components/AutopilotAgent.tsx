@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Bot, CheckCircle2, LoaderCircle, Play, ShieldCheck } from 'lucide-react';
+import { Bot, CheckCircle2, LoaderCircle, ShieldCheck } from 'lucide-react';
 import {
   approveAutopilotRun,
   autopilotAudioUrl,
@@ -134,7 +134,7 @@ export const AutopilotAgent = () => {
                 <p className="mb-2 text-xs uppercase text-slate-500">Planned tools</p>
                 <ol className="space-y-2 text-sm">
                   {run.plan.steps.map((step, index) => (
-                    <li key={step}>{index + 1}. {step.replaceAll('_', ' ')}</li>
+                    <li key={step}>{index + 1}. {step.replace(/_/g, ' ')}</li>
                   ))}
                 </ol>
               </div>
