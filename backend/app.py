@@ -38,11 +38,12 @@ class GenerateRequest(BaseModel):
     text: str = Field(min_length=1)
     voice_id: str = "default"
     seed: Optional[int] = None
-    filter_preset: Literal["clean", "robot_radio", "telephone", "damaged_tape"] = (
-        "robot_radio"
-    )
+    filter_preset: Literal["clean", "robot_radio", "telephone", "damaged_tape"] = "robot_radio"
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
     pause_scale: float = Field(default=1.0, ge=0.25, le=3.0)
+    variation: int = Field(default=50, ge=0, le=100)
+    source_diversity: int = Field(default=50, ge=0, le=100)
+    glitch: int = Field(default=0, ge=0, le=100)
 
 
 class OpenAITTSRequest(BaseModel):
@@ -193,6 +194,9 @@ def generate_speech_endpoint(req: GenerateRequest):
         filter_preset=req.filter_preset,
         speed=req.speed,
         pause_scale=req.pause_scale,
+        variation=req.variation,
+        source_diversity=req.source_diversity,
+        glitch=req.glitch,
     )
     return StreamingResponse(
         result.audio_buffer,

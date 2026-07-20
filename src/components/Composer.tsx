@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react';
+import axios from 'axios';
 import { CloudCog, Download, Play, RefreshCw, Sparkles } from 'lucide-react';
 import {
-  generateSpeech,
+  API_BASE,
   getCoverage,
   getProviderStatus,
   type CoverageResult,
   type ProviderStatus,
 } from '../api';
+import { useVoiceSettings } from '../VoiceSettingsContext';
 import { WordBlock } from './WordBlock';
 
-const filters = ['robot_radio', 'clean', 'telephone', 'damaged_tape'] as const;
-
 export const Composer = () => {
+  const { settings } = useVoiceSettings();
   const [text, setText] = useState(
     'Buffalo buffalo Buffalo buffalo buffalo buffalo Buffalo buffalo.',
   );
@@ -22,10 +23,9 @@ export const Composer = () => {
   const [error, setError] = useState<string | null>(null);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
   const [coverage, setCoverage] = useState<CoverageResult | null>(null);
-  const [filter, setFilter] = useState<(typeof filters)[number]>('robot_radio');
   const [speed, setSpeed] = useState(1);
-  const [pauseScale, setPauseScale] = useState(1);
   const tokens = text.trim() ? text.trim().split(/\s+/) : [];
+  const pauseScale = 0.25 + (settings.pauseLength / 100) * 2.75;
 
   useEffect(() => {
     let active = true;
@@ -67,16 +67,24 @@ export const Composer = () => {
     setIsGenerating(true);
     setError(null);
     try {
-      const generated = await generateSpeech(
-        text,
-        Math.floor(Math.random() * 1000),
-        filter,
-        speed,
-        pauseScale,
+      const response = await axios.post(
+        `${API_BASE}/api/speech/generate`,
+        {
+          text,
+          seed: Math.floor(Math.random() * 1000000),
+          filter_preset: settings.filterPreset,
+          speed,
+          pause_scale: pauseScale,
+          variation: settings.variation,
+          source_diversity: settings.sourceDiversity,
+          glitch: settings.glitch,
+        },
+        { responseType: 'blob' },
       );
+      const nextUrl = URL.createObjectURL(response.data);
       setAudioUrl((previous) => {
         if (previous) URL.revokeObjectURL(previous);
-        return generated.url;
+        return nextUrl;
       });
     } catch (generationError) {
       console.error(generationError);
@@ -103,10 +111,10 @@ export const Composer = () => {
           <Sparkles size={18} className="text-violet-400" />
           <div>
             <p className="text-sm font-semibold text-slate-200">One changing composite voice</p>
-            <p className="text-xs text-slate-500">Every output word is independently selected from the shared corpus</p>
+            <p className="text-xs text-slate-500">The Voice Controls panel is applied to every generated fragment mix</p>
           </div>
         </div>
-        <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-mono text-emerald-400">BUMBLEBEE MODE</span>
+        <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-mono text-emerald-400">CONTROLS ACTIVE</span>
       </div>
 
       <div className="mb-4 flex items-center justify-between rounded-lg border border-slate-800 bg-slate-950/70 px-4 py-3">
@@ -132,22 +140,13 @@ export const Composer = () => {
         placeholder="Enter text to fragment..."
       />
 
-      <div className="mb-4 grid grid-cols-3 gap-3 rounded-lg border border-slate-800 bg-slate-950 p-3">
-        <label className="text-xs text-slate-500">Filter
-          <select value={filter} onChange={(event) => setFilter(event.target.value as (typeof filters)[number])} className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-slate-300">
-            {filters.map((item) => <option key={item} value={item}>{item.replace('_', ' ')}</option>)}
-          </select>
-        </label>
-        <label className="text-xs text-slate-500">Rendered speed
-          <select value={speed} onChange={(event) => setSpeed(Number(event.target.value))} className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-slate-300">
+      <div className="mb-4 flex items-center gap-4 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-400">
+        <label>Rendered speed
+          <select value={speed} onChange={(event) => setSpeed(Number(event.target.value))} className="ml-2 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-slate-300">
             {[0.75, 1, 1.25, 1.5].map((value) => <option key={value} value={value}>{value}×</option>)}
           </select>
         </label>
-        <label className="text-xs text-slate-500">Punctuation pauses
-          <select value={pauseScale} onChange={(event) => setPauseScale(Number(event.target.value))} className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-2 text-slate-300">
-            <option value={0.6}>Tight</option><option value={1}>Normal</option><option value={1.5}>Dramatic</option>
-          </select>
-        </label>
+        <span className="font-mono text-slate-500">preset={settings.filterPreset} · variation={settings.variation} · diversity={settings.sourceDiversity} · pause={settings.pauseLength} · glitch={settings.glitch}</span>
       </div>
 
       <div className="mb-4 flex items-center gap-3">
@@ -161,7 +160,6 @@ export const Composer = () => {
         <div className="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-amber-400">Coverage gaps</p>
           <div className="flex flex-wrap gap-2">{missingWords.map((item) => <span key={item.word} className="rounded bg-slate-900 px-2 py-1 text-xs font-mono text-slate-300">{item.word}: {item.variants}/{coverage.target_variants}</span>)}</div>
-          <p className="mt-2 text-xs text-slate-500">Paste these words into Global vocabulary enrichment in the Sources panel.</p>
         </div>
       )}
 

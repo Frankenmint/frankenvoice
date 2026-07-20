@@ -20,6 +20,9 @@ def generate_composite_speech(
     filter_preset: str = "robot_radio",
     speed: float = 1.0,
     pause_scale: float = 1.0,
+    variation: int = 50,
+    source_diversity: int = 50,
+    glitch: int = 0,
 ) -> GenerationResult:
     """Always synthesize final speech from independently selected word clips."""
     return GenerationResult(
@@ -30,6 +33,9 @@ def generate_composite_speech(
             filter_preset=filter_preset,
             speed=speed,
             pause_scale=pause_scale,
+            variation=variation,
+            source_diversity=source_diversity,
+            glitch=glitch,
         )
     )
 
