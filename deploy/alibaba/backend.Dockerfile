@@ -22,14 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --upgrade pip \
+    && pip install -r requirements.txt \
+    && mv /usr/local/bin/yt-dlp /usr/local/bin/yt-dlp-real
 
-COPY backend ./backend
-RUN mkdir -p \
-    /app/data/autopilot/runs \
-    /app/data/dataset/clips \
-    /app/data/sources
-
-EXPOSE 8000
-
-CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
+COPY deploy/alibaba/yt
