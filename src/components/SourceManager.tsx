@@ -110,7 +110,10 @@ export const SourceManager = () => {
   return (
     <div className="p-4 space-y-5 overflow-y-auto">
       <section className="space-y-3">
-        <label className="block text-xs uppercase tracking-wider text-slate-500">YouTube source</label>
+        <label className="block text-xs uppercase tracking-wider text-slate-500">Add a source recording</label>
+        <p className="text-xs leading-5 text-slate-500">
+          Import a YouTube recording you have permission to use. FrankenVoice extracts reusable word fragments into the shared corpus.
+        </p>
         <input
           value={url}
           onChange={(event) => setUrl(event.target.value)}
@@ -144,42 +147,16 @@ export const SourceManager = () => {
       </section>
 
       <section className="space-y-3 border-t border-slate-800 pt-4">
-        <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-sky-400">
-          <CloudCog size={14} /> Qwen ASR
-        </div>
-        <input
-          value={sourceId}
-          onChange={(event) => setSourceId(event.target.value)}
-          placeholder="Imported source ID"
-          inputMode="numeric"
-          className={inputClass}
-        />
-        <input
-          value={audioUrl}
-          onChange={(event) => setAudioUrl(event.target.value)}
-          placeholder="Directly reachable audio URL"
-          className={inputClass}
-        />
-        <button
-          onClick={handleQwenTranscription}
-          disabled={loading || !numericSourceId || !audioUrl.trim()}
-          className="w-full rounded-md border border-sky-500/30 px-3 py-2 text-sm font-semibold text-sky-300 hover:bg-sky-500/10 disabled:opacity-40"
-        >
-          Transcribe + cut original words
-        </button>
-      </section>
-
-      <section className="space-y-3 border-t border-slate-800 pt-4">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-violet-400">
-          <Sparkles size={14} /> Global vocabulary enrichment
+          <Sparkles size={14} /> Qwen vocabulary enrichment
         </div>
         <p className="text-xs leading-5 text-slate-500">
-          No speaker profile. Every generated word joins the same changing FrankenVoice corpus.
+          Qwen fills vocabulary gaps with isolated words. Final sentences are still assembled by FrankenVoice from independent fragments.
         </p>
         <textarea
           value={words}
           onChange={(event) => setWords(event.target.value)}
-          placeholder="Paste target text or missing words"
+          placeholder="Paste a target line or missing words"
           className={`${inputClass} h-24 resize-none`}
         />
         <button
@@ -190,6 +167,37 @@ export const SourceManager = () => {
           Expand shared vocabulary
         </button>
       </section>
+
+      <details className="border-t border-slate-800 pt-4 text-sm">
+        <summary className="cursor-pointer select-none text-xs uppercase tracking-wider text-slate-500 hover:text-sky-400">
+          Advanced: Qwen ASR from public audio URL
+        </summary>
+        <div className="mt-3 space-y-3 rounded-md border border-slate-800 bg-slate-950/60 p-3">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-sky-400">
+            <CloudCog size={14} /> Developer ingestion tool
+          </div>
+          <input
+            value={sourceId}
+            onChange={(event) => setSourceId(event.target.value)}
+            placeholder="Imported source ID"
+            inputMode="numeric"
+            className={inputClass}
+          />
+          <input
+            value={audioUrl}
+            onChange={(event) => setAudioUrl(event.target.value)}
+            placeholder="Directly reachable audio URL"
+            className={inputClass}
+          />
+          <button
+            onClick={handleQwenTranscription}
+            disabled={loading || !numericSourceId || !audioUrl.trim()}
+            className="w-full rounded-md border border-sky-500/30 px-3 py-2 text-sm font-semibold text-sky-300 hover:bg-sky-500/10 disabled:opacity-40"
+          >
+            Transcribe + cut original words
+          </button>
+        </div>
+      </details>
     </div>
   );
 };
