@@ -1,4 +1,5 @@
 import io
+import os
 import random
 import re
 import subprocess
@@ -34,13 +35,39 @@ def ingest_youtube(url: str) -> Optional[str]:
     SOURCES_DIR.mkdir(parents=True, exist_ok=True)
     output_template = str(SOURCES_DIR / "%(id)s.%(ext)s")
     cmd = [
-        "yt-dlp", "-x", "--audio-format", "wav",
-        "--postprocessor-args", "ffmpeg:-ar 16000 -ac 1",
-        "-o", output_template, url,
+        "yt-dlp",
+        "--js-runtimes",
+        "deno",
+        "--remote-components",
+        "ejs:github",
     ]
+
+    cookies_file = os.getenv("YOUTUBE_COOKIES_FILE", "").strip()
+    if cookies_file:
+        cookies_path = Path(cookies_file)
+        if cookies_path.exists():
+            cmd.extend(["--cookies", str(cookies_path)])
+        else:
+            print(f"YouTube cookies file configured but missing: {cookies_path}")
+
+    cmd.extend([
+        "-x",
+        "--audio-format",
+        "wav",
+        "--postprocessor-args",
+        "ffmpeg:-ar 16000 -ac 1",
+        "-o",
+        output_template,
+        url,
+    ])
+
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
-        wav_files = sorted(SOURCES_DIR.glob("*.wav"), key=lambda path: path.stat().st_mtime, reverse=True)
+        wav_files = sorted(
+            SOURCES_DIR.glob("*.wav"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
         return str(wav_files[0]) if wav_files else None
     except (OSError, subprocess.CalledProcessError) as exc:
         stderr = getattr(exc, "stderr", "")
@@ -146,7 +173,10 @@ def _pause_for(separator: str, rng: random.Random, pause_scale: float) -> int:
 def _apply_speed(audio: AudioSegment, speed: float) -> AudioSegment:
     if abs(speed - 1.0) < 0.01:
         return audio
-    altered = audio._spawn(audio.raw_data, overrides={"frame_rate": max(1000, int(audio.frame_rate * speed))})
+    altered = audio._spawn(
+        audio.raw_data,
+        overrides={"frame_rate": max(1000, int(audio.frame_rate * speed))},
+    )
     return altered.set_frame_rate(16000)
 
 
@@ -166,7 +196,11 @@ def _apply_glitch(audio: AudioSegment, glitch: int, rng: random.Random) -> Audio
             repeats = 1 + round(intensity * 3)
             result = result[:start] + (fragment * repeats) + result[start + width:]
         else:
-            result = result[:start] + AudioSegment.silent(duration=width, frame_rate=16000) + result[start + width:]
+            result = (
+                result[:start]
+                + AudioSegment.silent(duration=width, frame_rate=16000)
+                + result[start + width:]
+            )
     return result
 
 
@@ -193,8 +227,12 @@ def generate_speech(
         token = match.group(0)
         clips = db.get_clips_for_word(token.lower())
         selected_clip = rank_clips(
-            clips, recently_used, recent_sources, rng,
-            variation=variation, source_diversity=source_diversity,
+            clips,
+            recently_used,
+            recent_sources,
+            rng,
+            variation=variation,
+            source_diversity=source_diversity,
         )
         seg = None
         if selected_clip:
@@ -219,7 +257,10 @@ def generate_speech(
             last_clip_path = None
         next_start = matches[index + 1].start() if index + 1 < len(matches) else len(text)
         separator = text[match.end():next_start]
-        final_audio += seg + AudioSegment.silent(duration=_pause_for(separator, rng, pause_scale), frame_rate=16000)
+        final_audio += seg + AudioSegment.silent(
+            duration=_pause_for(separator, rng, pause_scale),
+            frame_rate=16000,
+        )
 
     if len(final_audio) == 0:
         final_audio = AudioSegment.silent(duration=100, frame_rate=16000)

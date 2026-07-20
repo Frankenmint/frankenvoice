@@ -6,8 +6,12 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      YOUTUBE_COOKIES_FILE: /run/secrets/youtube_cookies
     volumes:
       - frankenvoice_data:/app/data
+    secrets:
+      - youtube_cookies
     expose:
       - "8000"
 
@@ -20,6 +24,10 @@ services:
       - backend
     ports:
       - "127.0.0.1:8088:80"
+
+secrets:
+  youtube_cookies:
+    file: ./youtube-only-cookies.txt
 
 volumes:
   frankenvoice_data:
