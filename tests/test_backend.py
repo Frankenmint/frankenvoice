@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydub import AudioSegment
 
-from backend import db, engine, enrichment, speech_service
+from backend import autopilot, db, engine, enrichment, speech_service
 from backend.app import app, chunk_conversation, clean_markdown_for_speech
 from backend.qwen_cloud import QwenCloudError, synthesize_word
 from backend.speech_service import GenerationResult
@@ -15,6 +15,8 @@ from backend.speech_service import GenerationResult
 def temp_database(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "metadata.sqlite")
     monkeypatch.setattr(enrichment, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(autopilot, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(autopilot, "RUNS_DIR", tmp_path / "autopilot" / "runs")
     db.init_db()
 
 
@@ -127,6 +129,56 @@ def test_markdown_cleanup_and_chunking():
     assert all(len(chunk) <= 120 for chunk in chunks)
 
 
+def test_autopilot_plan_requires_human_approval(monkeypatch):
+    monkeypatch.setattr(
+        autopilot,
+        "plan_autopilot_workflow",
+        lambda **kwargs: {
+            "summary": "Prepare corpus and generate audio",
+            "rationale": "Coverage gaps require Qwen tools",
+            "steps": ["check_coverage", "enrich_vocabulary", "generate_audio"],
+            "target_variants": 2,
+            "estimated_external_actions": 2,
+        },
+    )
+    run = autopilot.create_run(
+        goal="Make this sentence speakable",
+        target_text="hello signal",
+        source_urls=[],
+        target_variants=2,
+    )
+    assert run["status"] == "awaiting_approval"
+    assert run["approval"] is None
+    assert any(event["type"] == "human_checkpoint" for event in run["events"])
+
+
+def test_autopilot_executes_only_after_approval(monkeypatch):
+    monkeypatch.setattr(
+        autopilot,
+        "plan_autopilot_workflow",
+        lambda **kwargs: {
+            "summary": "Generate composite",
+            "rationale": "No source import needed",
+            "steps": ["check_coverage", "generate_audio"],
+            "target_variants": 1,
+            "estimated_external_actions": 0,
+        },
+    )
+    monkeypatch.setattr(
+        autopilot,
+        "generate_composite_speech",
+        lambda text: GenerationResult(audio_buffer=silent_wav()),
+    )
+    run = autopilot.create_run("Generate it", "hello", [], 1)
+    with pytest.raises(ValueError, match="approved"):
+        autopilot.execute_run(run["id"])
+    autopilot.approve_run(run["id"], False, False)
+    autopilot.execute_run(run["id"])
+    completed = autopilot.get_run(run["id"])
+    assert completed["status"] == "complete"
+    assert completed["result"]["audio_ready"] is True
+
+
 def test_api_generation_is_composite_only(monkeypatch):
     monkeypatch.setattr(
         "backend.app.generate_composite_speech",
@@ -154,15 +206,17 @@ def test_conversation_endpoint_returns_chunks():
     assert payload["chunks"]
 
 
-def test_provider_status_describes_one_shared_voice(monkeypatch):
+def test_provider_status_describes_autopilot_agent(monkeypatch):
     monkeypatch.setenv("DASHSCOPE_API_KEY", "test-key")
     with TestClient(app) as client:
         response = client.get("/api/providers/status")
     payload = response.json()
+    assert payload["track"] == "autopilot_agent"
+    assert payload["qwen_agent"]["configured"] is True
+    assert payload["qwen_agent"]["human_approval_required"] is True
     assert payload["speech_strategy"] == "composite_only"
     assert payload["final_speech"]["whole_sentence_cloud_tts"] is False
     assert payload["final_speech"]["voice_count"] == 1
-    assert payload["qwen_enrichment"]["configured"] is True
 
 
 def test_openai_endpoint_rejects_unsupported_format():

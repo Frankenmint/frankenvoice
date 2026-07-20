@@ -18,7 +18,10 @@ COPY requirements.txt ./
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
 COPY backend ./backend
-RUN mkdir -p /app/data/dataset/clips /app/data/sources
+RUN mkdir -p \
+    /app/data/autopilot/runs \
+    /app/data/dataset/clips \
+    /app/data/sources
 
 EXPOSE 8000
 

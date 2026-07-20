@@ -41,6 +41,33 @@ export interface ConversationChunks {
   count: number;
 }
 
+export interface AutopilotRun {
+  id: string;
+  status: 'awaiting_approval' | 'approved' | 'executing' | 'complete' | 'failed';
+  goal: string;
+  target_text: string;
+  source_urls: string[];
+  coverage_before: CoverageResult;
+  plan: {
+    summary: string;
+    rationale: string;
+    steps: string[];
+    target_variants: number;
+    estimated_external_actions: number;
+  };
+  approval: null | {
+    allow_source_imports: boolean;
+    allow_cloud_enrichment: boolean;
+  };
+  events: Array<{ type: string; message: string; tool?: string }>;
+  result: null | {
+    report: string;
+    audio_ready: boolean;
+    coverage_final: CoverageResult;
+  };
+  error: string | null;
+}
+
 export const generateSpeech = async (
   text: string,
   seed?: number,
@@ -101,6 +128,41 @@ export const prepareConversation = async (
   });
   return response.data;
 };
+
+export const createAutopilotPlan = async (
+  goal: string,
+  targetText: string,
+  sourceUrls: string[],
+  targetVariants = 3,
+): Promise<AutopilotRun> => {
+  const response = await axios.post(`${API_BASE}/api/autopilot/plan`, {
+    goal,
+    target_text: targetText,
+    source_urls: sourceUrls,
+    target_variants: targetVariants,
+  });
+  return response.data;
+};
+
+export const getAutopilotRun = async (runId: string): Promise<AutopilotRun> => {
+  const response = await axios.get(`${API_BASE}/api/autopilot/runs/${runId}`);
+  return response.data;
+};
+
+export const approveAutopilotRun = async (
+  runId: string,
+  allowSourceImports: boolean,
+  allowCloudEnrichment: boolean,
+): Promise<AutopilotRun> => {
+  const response = await axios.post(`${API_BASE}/api/autopilot/runs/${runId}/approve`, {
+    allow_source_imports: allowSourceImports,
+    allow_cloud_enrichment: allowCloudEnrichment,
+  });
+  return response.data;
+};
+
+export const autopilotAudioUrl = (runId: string) =>
+  `${API_BASE}/api/autopilot/runs/${runId}/audio`;
 
 export const transcribeSourceWithQwen = async (sourceId: number, audioUrl: string) => {
   const response = await axios.post(`${API_BASE}/api/sources/${sourceId}/qwen-transcribe`, {

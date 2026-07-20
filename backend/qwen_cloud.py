@@ -9,9 +9,10 @@ from urllib.request import Request, urlopen
 
 from pydub import AudioSegment
 
-DEFAULT_ASR_ENDPOINT = (
+DEFAULT_COMPATIBLE_ENDPOINT = (
     "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"
 )
+DEFAULT_ASR_ENDPOINT = DEFAULT_COMPATIBLE_ENDPOINT
 DEFAULT_TTS_ENDPOINT = (
     "https://dashscope-intl.aliyuncs.com/api/v1/services/"
     "aigc/multimodal-generation/generation"
@@ -19,14 +20,16 @@ DEFAULT_TTS_ENDPOINT = (
 
 
 class QwenCloudError(RuntimeError):
-    """Raised when Qwen dataset enrichment cannot complete."""
+    """Raised when a Qwen Cloud operation cannot complete."""
 
 
 @dataclass(frozen=True)
 class QwenCloudConfig:
     api_key: str
+    compatible_endpoint: str = DEFAULT_COMPATIBLE_ENDPOINT
     asr_endpoint: str = DEFAULT_ASR_ENDPOINT
     tts_endpoint: str = DEFAULT_TTS_ENDPOINT
+    agent_model: str = "qwen-plus"
     asr_model: str = "qwen3-asr-flash"
     tts_model: str = "qwen3-tts-flash"
     voices: tuple[str, ...] = ("Cherry",)
@@ -44,12 +47,19 @@ class QwenCloudConfig:
             for voice in os.getenv("QWEN_TTS_VOICES", "Cherry").split(",")
             if voice.strip()
         ) or ("Cherry",)
+        compatible_endpoint = (
+            os.getenv("QWEN_COMPATIBLE_ENDPOINT", DEFAULT_COMPATIBLE_ENDPOINT).strip()
+            or DEFAULT_COMPATIBLE_ENDPOINT
+        )
         return cls(
             api_key=os.getenv("DASHSCOPE_API_KEY", "").strip(),
+            compatible_endpoint=compatible_endpoint,
             asr_endpoint=os.getenv("QWEN_ASR_ENDPOINT", DEFAULT_ASR_ENDPOINT).strip()
             or DEFAULT_ASR_ENDPOINT,
             tts_endpoint=os.getenv("QWEN_TTS_ENDPOINT", DEFAULT_TTS_ENDPOINT).strip()
             or DEFAULT_TTS_ENDPOINT,
+            agent_model=os.getenv("QWEN_AGENT_MODEL", "qwen-plus").strip()
+            or "qwen-plus",
             asr_model=os.getenv("QWEN_ASR_MODEL", "qwen3-asr-flash").strip()
             or "qwen3-asr-flash",
             tts_model=os.getenv("QWEN_TTS_MODEL", "qwen3-tts-flash").strip()
@@ -95,10 +105,10 @@ def _download_audio(url: str, timeout: float) -> bytes:
     return data
 
 
-def _content_json(payload: dict[str, Any]) -> Any:
+def _message_content(payload: dict[str, Any]) -> str:
     choices = payload.get("choices")
     if not isinstance(choices, list) or not choices:
-        raise QwenCloudError("Qwen ASR response did not include choices")
+        raise QwenCloudError("Qwen response did not include choices")
     message = choices[0].get("message", {})
     content = message.get("content", "")
     if isinstance(content, list):
@@ -106,12 +116,76 @@ def _content_json(payload: dict[str, Any]) -> Any:
             item.get("text", "") for item in content if isinstance(item, dict)
         )
     if not isinstance(content, str):
-        raise QwenCloudError("Qwen ASR returned unreadable content")
+        raise QwenCloudError("Qwen returned unreadable content")
+    return content
+
+
+def _content_json(payload: dict[str, Any]) -> Any:
+    content = _message_content(payload)
     match = re.search(r"\{.*\}|\[.*\]", content, flags=re.DOTALL)
     try:
         return json.loads(match.group(0) if match else content)
     except json.JSONDecodeError as exc:
-        raise QwenCloudError("Qwen ASR did not return timestamp JSON") from exc
+        raise QwenCloudError("Qwen did not return valid JSON") from exc
+
+
+def plan_autopilot_workflow(
+    goal: str,
+    target_text: str,
+    source_urls: list[str],
+    coverage: dict[str, Any],
+    target_variants: int = 3,
+    config: Optional[QwenCloudConfig] = None,
+) -> dict[str, Any]:
+    """Use Qwen to turn an ambiguous corpus-building goal into a constrained tool plan."""
+    config = config or QwenCloudConfig.from_env()
+    if not config.configured:
+        raise QwenCloudError("DASHSCOPE_API_KEY is not configured")
+
+    allowed_steps = [
+        "import_sources",
+        "check_coverage",
+        "enrich_vocabulary",
+        "generate_audio",
+    ]
+    system_prompt = (
+        "You are the planning brain for FrankenVoice Autopilot, a production workflow "
+        "agent. Convert the user's goal into a minimal executable plan using only the "
+        f"allowed steps: {allowed_steps}. Source imports and Qwen vocabulary enrichment "
+        "are external actions and must remain behind a human approval checkpoint. "
+        "Never claim that Qwen generates the final sentence; final audio is always "
+        "assembled word-by-word by the local composite engine. Return JSON only with: "
+        "summary, rationale, steps, target_variants, estimated_external_actions."
+    )
+    user_payload = {
+        "goal": goal,
+        "target_text_preview": target_text[:1200],
+        "source_urls": source_urls,
+        "current_coverage": coverage,
+        "requested_target_variants": target_variants,
+    }
+    body = {
+        "model": config.agent_model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": json.dumps(user_payload)},
+        ],
+        "temperature": 0.1,
+        "response_format": {"type": "json_object"},
+    }
+    request = Request(
+        config.compatible_endpoint,
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {config.api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    plan = _content_json(_request_json(request, config.timeout_seconds))
+    if not isinstance(plan, dict):
+        raise QwenCloudError("Qwen agent plan must be a JSON object")
+    return plan
 
 
 def transcribe_audio_url(

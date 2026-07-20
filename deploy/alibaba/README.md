@@ -1,50 +1,48 @@
 # Alibaba Cloud deployment proof
 
-This directory contains the reproducible deployment package for the FrankenVoice hackathon submission.
+FrankenVoice is submitted to **Track 4: Autopilot Agent**. Its FastAPI agent backend runs on Alibaba Cloud ECS and uses Alibaba Cloud Model Studio / DashScope for Qwen planning, Qwen3-ASR, and isolated-word Qwen3-TTS enrichment.
 
-## Architecture
+## Production architecture
 
 ```text
-frankenvoice.frankenmint.com
+https://frankenvoice.frankenmint.com
         |
         v
-Alibaba Cloud ECS
+Cloudflare DNS / proxy
         |
         v
-HTTPS reverse proxy
+Alibaba Cloud ECS host Nginx (TLS origin)
         |
         v
-React/Vite frontend container
+127.0.0.1:8088
         |
-        +--> FastAPI backend container
-                  |
-                  +--> SQLite fragment corpus
-                  +--> FFmpeg audio pipeline
-                  +--> Alibaba Cloud Model Studio / DashScope
-                       - Qwen3-ASR source transcription
-                       - Qwen3-TTS isolated-word enrichment
+        v
+React/Nginx container
+        | same-origin /api and /v1 proxy
+        v
+FastAPI Autopilot container
+        |-- persistent run state and event logs
+        |-- SQLite fragment corpus
+        |-- FFmpeg / yt-dlp / composite engine
+        `-- Alibaba Cloud Model Studio / DashScope
+             |-- Qwen workflow planning
+             |-- Qwen3-ASR source transcription
+             `-- Qwen3-TTS isolated vocabulary enrichment
 ```
 
-Qwen expands the shared word corpus. Final speech is always assembled by FrankenVoice from independently selected fragments.
+The browser uses one public origin, so the deployed application does not require cross-origin API requests.
 
-## Deployment files
+## Files
 
-- `backend.Dockerfile` builds the FastAPI and audio-processing service.
-- `frontend.Dockerfile` builds the React/Vite application and serves it with Nginx.
-- `nginx.conf` proxies frontend API requests to FastAPI on the same origin.
-- `docker-compose.yml` runs the frontend and backend on an Alibaba ECS instance.
-- `.env.example` documents the required Alibaba Model Studio settings without secrets.
+- `backend.Dockerfile` builds the FastAPI agent and audio-processing runtime.
+- `frontend.Dockerfile` builds the React application and serves it with Nginx.
+- `nginx.conf` proxies `/api`, `/v1`, health, and API documentation to FastAPI.
+- `docker-compose.yml` runs both services and persists `/app/data`.
+- `.env.example` documents required Qwen Cloud settings without secrets.
 
 ## ECS deployment
 
-Recommended demonstration host:
-
-- Alibaba Cloud ECS running Ubuntu
-- Docker Engine and the Docker Compose plugin
-- A public IPv4 address
-- HTTP and HTTPS allowed by the ECS security group
-
-Clone the repository on the ECS host, then prepare the environment file:
+After merging the PR, connect to the ECS instance through Alibaba Workbench and run:
 
 ```bash
 git clone https://github.com/Frankenmint/frankenvoice.git
@@ -52,26 +50,31 @@ cd frankenvoice/deploy/alibaba
 cp .env.example .env
 ```
 
-Set `DASHSCOPE_API_KEY` in the private `.env` file on the server. Never commit that file.
-
-Start the stack:
+Set `DASHSCOPE_API_KEY` in the private `.env` file, then start the stack:
 
 ```bash
 docker compose up -d --build
-```
-
-The Compose stack binds the application to the ECS loopback interface at `127.0.0.1:8088`. Configure the host's HTTPS reverse proxy to send traffic for `frankenvoice.frankenmint.com` to that address.
-
-## Verification
-
-From the ECS host:
-
-```bash
+docker compose ps
 curl http://127.0.0.1:8088/health
 curl http://127.0.0.1:8088/api/providers/status
 ```
 
-Public judging URLs after DNS and HTTPS configuration:
+The application is intentionally bound to ECS loopback port `8088`. A host-level Nginx virtual host proxies `frankenvoice.frankenmint.com` to `http://127.0.0.1:8088`.
+
+## Cloudflare DNS
+
+Create an `A` record:
+
+```text
+Type: A
+Name: frankenvoice
+Target: <ECS public IPv4>
+Proxy: DNS only while issuing the origin certificate; proxied after verification
+```
+
+Configure HTTPS on the ECS host, verify the origin directly, and then enable the Cloudflare proxy. Use **Full (strict)** SSL mode once the origin certificate is valid.
+
+## Verification URLs
 
 ```text
 https://frankenvoice.frankenmint.com/
@@ -80,28 +83,38 @@ https://frankenvoice.frankenmint.com/docs
 https://frankenvoice.frankenmint.com/api/providers/status
 ```
 
-The provider-status response should show that Qwen enrichment is configured while final speech remains composite-only.
+The Autopilot UI demonstrates:
 
-## Submission links
+1. ambiguous goal submission;
+2. Qwen-generated workflow planning;
+3. persisted plan and coverage preflight;
+4. human approval before downloads or cloud enrichment;
+5. autonomous tool execution and event reporting;
+6. final playable composite audio.
 
-Use this file for the submission field requesting proof of Alibaba Cloud deployment:
+## Submission evidence
+
+Use this file for the code proof field:
 
 ```text
 https://github.com/Frankenmint/frankenvoice/blob/main/deploy/alibaba/README.md
 ```
 
-The direct Qwen/DashScope API implementation is here:
+Direct Qwen API integration:
 
 ```text
 https://github.com/Frankenmint/frankenvoice/blob/main/backend/qwen_cloud.py
 ```
 
-## Demo safety and cost control
+Agent orchestration and approval workflow:
 
-For the judging deployment:
+```text
+https://github.com/Frankenmint/frankenvoice/blob/main/backend/autopilot.py
+```
 
-- preload a representative fragment corpus;
-- keep the DashScope key only on the backend;
-- restrict unrestricted source ingestion;
-- limit public text length and request rate where practical;
-- keep the demonstration online through judging, then reduce or stop the instance if ongoing cost is not desired.
+For the required deployment screenshot, show Alibaba Workbench with:
+
+- the ECS instance connection visible;
+- `docker compose ps` showing both containers running;
+- a successful `/health` or `/api/autopilot/plan` response;
+- the FrankenVoice repository path in the terminal.

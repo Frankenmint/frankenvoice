@@ -37,7 +37,14 @@ def generate_composite_speech(
 def get_provider_status() -> dict:
     config = QwenCloudConfig.from_env()
     return {
+        "track": "autopilot_agent",
         "speech_strategy": "composite_only",
+        "qwen_agent": {
+            "configured": config.configured,
+            "model": config.agent_model,
+            "role": "plans workflows and selects FrankenVoice tools",
+            "human_approval_required": True,
+        },
         "final_speech": {
             "provider": "frankenvoice_fragment_engine",
             "whole_sentence_cloud_tts": False,
