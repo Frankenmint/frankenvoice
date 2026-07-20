@@ -9,17 +9,15 @@ import {
   type ProviderStatus,
 } from '../api';
 import { useVoiceSettings } from '../VoiceSettingsContext';
-import { WordBlock } from './WordBlock';
 
 export const Composer = () => {
   const { settings } = useVoiceSettings();
   const [text, setText] = useState(
-    'Buffalo buffalo Buffalo buffalo buffalo buffalo Buffalo buffalo.',
+    'Ahoy matey, FrankenVoice is broadcasting from Alibaba Cloud, assembled one fragment at a time.',
   );
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCheckingCoverage, setIsCheckingCoverage] = useState(false);
-  const [lockedWords, setLockedWords] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
   const [coverage, setCoverage] = useState<CoverageResult | null>(null);
@@ -111,7 +109,7 @@ export const Composer = () => {
           <Sparkles size={18} className="text-violet-400" />
           <div>
             <p className="text-sm font-semibold text-slate-200">One changing composite voice</p>
-            <p className="text-xs text-slate-500">The Voice Controls panel is applied to every generated fragment mix</p>
+            <p className="text-xs text-slate-500">Qwen enriches the corpus. FrankenVoice assembles the final sentence from independent fragments.</p>
           </div>
         </div>
         <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-mono text-emerald-400">CONTROLS ACTIVE</span>
@@ -122,7 +120,7 @@ export const Composer = () => {
           <CloudCog size={18} className="text-sky-400" />
           <div>
             <p className="text-sm font-semibold text-slate-300">Qwen vocabulary enrichment</p>
-            <p className="text-xs text-slate-500">Transcribes sources and expands one global word pool</p>
+            <p className="text-xs text-slate-500">Transcribes sources and expands one shared word pool</p>
           </div>
         </div>
         <span className={`rounded-full px-3 py-1 text-xs font-mono ${providerStatus?.qwen_enrichment.configured ? 'bg-sky-500/10 text-sky-400' : 'bg-amber-500/10 text-amber-400'}`}>
@@ -130,6 +128,9 @@ export const Composer = () => {
         </span>
       </div>
 
+      <label className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+        Final line to fragment
+      </label>
       <textarea
         value={text}
         onChange={(event) => {
@@ -137,7 +138,7 @@ export const Composer = () => {
           setCoverage(null);
         }}
         className="w-full h-32 bg-slate-800 text-slate-200 p-4 rounded-lg font-mono text-lg mb-4 focus:ring-2 ring-violet-500 outline-none resize-none"
-        placeholder="Enter text to fragment..."
+        placeholder="Enter a final line to assemble from the shared corpus..."
       />
 
       <div className="mb-4 flex items-center gap-4 rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-400">
@@ -151,7 +152,7 @@ export const Composer = () => {
 
       <div className="mb-4 flex items-center gap-3">
         <button onClick={handleCoverage} disabled={isCheckingCoverage || !text.trim()} className="rounded-md border border-slate-700 bg-slate-950 px-4 py-2 text-sm font-semibold text-slate-300 hover:border-sky-500 disabled:opacity-50">
-          {isCheckingCoverage ? 'CHECKING…' : 'CHECK DATASET COVERAGE'}
+          {isCheckingCoverage ? 'CHECKING…' : 'CHECK CORPUS COVERAGE'}
         </button>
         {coverage && <span className={`text-xs font-mono ${coverage.complete ? 'text-emerald-400' : 'text-amber-400'}`}>{coverage.complete ? `Ready: ${coverage.words.length} words covered` : `${missingWords.length} words need more variants`}</span>}
       </div>
@@ -163,10 +164,16 @@ export const Composer = () => {
         </div>
       )}
 
-      <div className="flex-1 bg-slate-950 rounded-lg border border-slate-800 p-6 overflow-y-auto flex flex-wrap content-start gap-y-4">
-        {tokens.map((token, index) => (
-          <WordBlock key={`${token}-${index}`} word={token} index={index} onReroll={(wordIndex) => console.log('Reroll', wordIndex)} onPlay={(word) => console.log('Preview', word)} isLocked={lockedWords.includes(index)} onToggleLock={(wordIndex) => setLockedWords((current) => current.includes(wordIndex) ? current.filter((item) => item !== wordIndex) : [...current, wordIndex])} />
-        ))}
+      <div className="flex-1 bg-slate-950 rounded-lg border border-slate-800 p-6 overflow-y-auto">
+        <p className="mb-4 text-xs uppercase tracking-wider text-slate-500">Independent word fragments</p>
+        <div className="flex flex-wrap content-start gap-2">
+          {tokens.map((token, index) => (
+            <span key={`${token}-${index}`} className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 font-mono text-slate-200">
+              <span className="mr-2 text-xs text-slate-500">{index + 1}</span>
+              {token}
+            </span>
+          ))}
+        </div>
       </div>
 
       <div className="mt-6 flex justify-between items-center">

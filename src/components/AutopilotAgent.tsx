@@ -9,9 +9,11 @@ import {
 } from '../api';
 
 export const AutopilotAgent = () => {
-  const [goal, setGoal] = useState('Prepare the shared corpus and generate a complete FrankenVoice reading.');
+  const [goal, setGoal] = useState(
+    'Prepare a robotic pirate transmission from the shared corpus. Check vocabulary coverage, use Qwen only to fill missing words, require approval for cloud actions, and keep the final audio word-by-word composite.',
+  );
   const [targetText, setTargetText] = useState(
-    'FrankenVoice autonomously checks its vocabulary, requests approval for cloud actions, and assembles the final transmission one fragment at a time.',
+    'Ahoy matey, FrankenVoice is broadcasting from Alibaba Cloud, assembled one fragment at a time.',
   );
   const [sources, setSources] = useState('');
   const [run, setRun] = useState<AutopilotRun | null>(null);
@@ -75,7 +77,7 @@ export const AutopilotAgent = () => {
             <div>
               <h1 className="text-xl font-bold">QWEN AUTOPILOT AGENT</h1>
               <p className="text-sm text-slate-400">
-                Qwen plans the workflow. FrankenVoice tools execute it after human approval.
+                Qwen plans and enriches the corpus. FrankenVoice assembles final audio from independent fragments.
               </p>
             </div>
           </div>
@@ -83,28 +85,32 @@ export const AutopilotAgent = () => {
 
         <section className="grid gap-4 rounded-xl border border-slate-800 bg-slate-950 p-5">
           <label className="text-sm text-slate-300">
-            Goal
-            <input
+            Creative direction / agent objective
+            <textarea
               value={goal}
               onChange={(event) => setGoal(event.target.value)}
-              className="mt-2 w-full rounded border border-slate-700 bg-slate-900 p-3"
+              className="mt-2 h-28 w-full resize-none rounded border border-slate-700 bg-slate-900 p-3"
             />
           </label>
           <label className="text-sm text-slate-300">
-            Target text
+            Final line to render
             <textarea
               value={targetText}
               onChange={(event) => setTargetText(event.target.value)}
-              className="mt-2 h-36 w-full resize-none rounded border border-slate-700 bg-slate-900 p-3"
+              className="mt-2 h-28 w-full resize-none rounded border border-slate-700 bg-slate-900 p-3"
             />
           </label>
           <label className="text-sm text-slate-300">
-            Optional source URLs, one per line
+            New source videos — optional, one per line
             <textarea
               value={sources}
               onChange={(event) => setSources(event.target.value)}
+              placeholder="Leave blank to use the existing shared corpus"
               className="mt-2 h-20 w-full resize-none rounded border border-slate-700 bg-slate-900 p-3"
             />
+            <span className="mt-2 block text-xs text-slate-500">
+              Source downloads and paid Qwen enrichment remain blocked until the human checkpoint.
+            </span>
           </label>
           <button
             onClick={handlePlan}
@@ -112,7 +118,7 @@ export const AutopilotAgent = () => {
             className="flex items-center justify-center gap-2 rounded bg-violet-600 px-4 py-3 font-bold hover:bg-violet-500 disabled:opacity-50"
           >
             {busy ? <LoaderCircle className="animate-spin" /> : <Bot />}
-            ASK QWEN TO PLAN
+            ASK QWEN TO BUILD PLAN
           </button>
         </section>
 
@@ -139,7 +145,7 @@ export const AutopilotAgent = () => {
                 </ol>
               </div>
               <div className="rounded border border-slate-800 bg-slate-900 p-4">
-                <p className="mb-2 text-xs uppercase text-slate-500">Preflight</p>
+                <p className="mb-2 text-xs uppercase text-slate-500">Corpus preflight</p>
                 <p className="text-sm">External actions: {run.plan.estimated_external_actions}</p>
                 <p className="text-sm">Vocabulary entries checked: {run.coverage_before.words.length}</p>
                 <p className="text-sm">
