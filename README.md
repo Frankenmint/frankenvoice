@@ -2,13 +2,34 @@
 
 ### *Look through the noise. Hear the voice inside it.*
 
-**OpenAI-compatible composite text-to-speech assembled one word at a time from many different sources.**
+**A Qwen-powered Autopilot Agent that builds and operates a composite text-to-speech corpus.**
 
 ![frankenvoice audio stereogram](https://github.com/Frankenmint/frankenvoice/blob/main/assets/hero.jpg?raw=true)
 
+## Track 4: Autopilot Agent
+
+FrankenVoice automates an end-to-end speech-production workflow from an ambiguous goal to a completed composite audio file.
+
+```text
+User goal + target text + optional sources
+→ Qwen Cloud plans the workflow
+→ FrankenVoice persists the plan
+→ human reviews external actions
+→ approved tools execute
+→ corpus coverage improves
+→ final composite audio + execution report
+```
+
+The human checkpoint separately controls:
+
+- downloading and processing supplied media sources;
+- paid Qwen Cloud requests for vocabulary enrichment.
+
+See [Qwen Cloud Autopilot Agent proof](docs/qwen-cloud-agent.md) for the complete architecture, API lifecycle, and direct code links.
+
 ## What is FrankenVoice?
 
-FrankenVoice creates Bumblebee-style speech. Every final word is an independently selected audio fragment from one shared global corpus. The same sentence can sound different every time.
+FrankenVoice creates Bumblebee-style speech. Every final word is independently selected from one shared global corpus, so the same sentence can sound different every time.
 
 ```text
 "I am trying to reach you"
@@ -22,29 +43,48 @@ you     → source 5, clip 4
 five independent clips → punctuation-aware stitch → shared filter → WAV
 ```
 
-**Qwen never generates the final sentence.** Alibaba Cloud Model Studio is dataset-building compute:
+Qwen never generates the final sentence. Qwen Cloud serves three agent capabilities:
 
-- Qwen3-ASR timestamps long-form source audio.
-- FrankenVoice cuts those timestamps from the original recording into real word clips.
-- Coverage analysis finds missing or underrepresented words.
-- Qwen3-TTS generates isolated vocabulary variants for the shared corpus.
-- Derived clips are stored with `qwen_derived` provenance.
-- Final `/api/speech/generate` and `/v1/audio/speech` output always comes from the fragment composer.
+- **Qwen planning model** converts ambiguous goals into constrained tool plans.
+- **Qwen3-ASR** timestamps long-form source audio.
+- **Qwen3-TTS** creates isolated vocabulary variants for the shared corpus.
 
-## Pipeline
+Final `/api/speech/generate` and `/v1/audio/speech` output always comes from the local fragment composer.
+
+## Autopilot workflow
 
 ```text
-YouTube or audio source
-→ audio extraction
-→ Qwen ASR or local Whisper timestamps
-→ original word clips
-→ shared SQLite corpus
-→ coverage analysis
-→ Qwen isolated-word enrichment
-→ source-diverse clip selection per word
-→ punctuation-aware stitching + shared filter
-→ FrankenVoice WAV / MP3
+Qwen plan
+→ check shared-corpus coverage
+→ optionally import media with yt-dlp + FFmpeg
+→ optionally enrich missing words with Qwen3-TTS
+→ generate composite speech
+→ persist event log, coverage report, and WAV
 ```
+
+Agent endpoints:
+
+```text
+POST /api/autopilot/plan
+GET  /api/autopilot/runs/{run_id}
+POST /api/autopilot/runs/{run_id}/approve
+GET  /api/autopilot/runs/{run_id}/audio
+```
+
+Example plan request:
+
+```bash
+curl -X POST http://localhost:8000/api/autopilot/plan \
+  -H "Content-Type: application/json" \
+  -d '{
+    "goal":"Make this response fully speakable and generate the final audio",
+    "target_text":"FrankenVoice checks its corpus before it speaks.",
+    "source_urls":[],
+    "target_variants":3
+  }'
+```
+
+The returned run remains `awaiting_approval` until a person approves its external actions.
 
 ## Requirements
 
@@ -54,18 +94,19 @@ YouTube or audio source
 - `yt-dlp`
 - `espeak-ng` for last-resort isolated-word fallback
 - Rubber Band CLI for optional prosody matching
-- Alibaba Cloud Model Studio API key for Qwen enrichment
+- Alibaba Cloud Model Studio API key
 
-## Qwen configuration
+## Qwen Cloud configuration
 
 ```bash
 export DASHSCOPE_API_KEY="sk-your-key"
+export QWEN_AGENT_MODEL="qwen-plus"
 export QWEN_ASR_MODEL="qwen3-asr-flash"
 export QWEN_TTS_MODEL="qwen3-tts-flash"
 export QWEN_TTS_VOICES="Cherry"
 ```
 
-See `.env.example` for endpoints and timeout settings.
+See `.env.example` for endpoint and timeout settings.
 
 Provider status:
 
@@ -73,16 +114,7 @@ Provider status:
 curl http://localhost:8000/api/providers/status
 ```
 
-Expected strategy:
-
-```json
-{
-  "speech_strategy": "composite_only",
-  "final_speech": {
-    "whole_sentence_cloud_tts": false
-  }
-}
-```
+The response identifies the Track 4 agent model, its planning role, and the mandatory human approval rule.
 
 ## Backend
 
@@ -95,57 +127,6 @@ uvicorn backend.app:app --reload
 
 API: `http://localhost:8000`
 
-### Generate composite speech
-
-```bash
-curl -X POST http://localhost:8000/api/speech/generate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "I am trying to reach you through this damaged transmission.",
-    "filter_preset": "robot_radio",
-    "speed": 1.0,
-    "pause_scale": 1.0
-  }' \
-  --output frankenvoice.wav
-```
-
-### Check vocabulary coverage
-
-```bash
-curl -X POST http://localhost:8000/api/dataset/coverage \
-  -H "Content-Type: application/json" \
-  -d '{"text":"I am trying to reach you","target_variants":3}'
-```
-
-### Enrich the shared corpus
-
-```bash
-curl -X POST http://localhost:8000/api/dataset/enrich \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text":"reach transmission navigation",
-    "target_variants":3
-  }'
-```
-
-Each generated item is a separate reusable clip in the global `Qwen Derived Corpus`.
-
-### Conversation Reader
-
-```text
-POST /api/conversation/chunks
-```
-
-The frontend cleans Markdown, splits long responses into short chunks, prefetches upcoming audio, and provides play, pause, replay, skip, stop, progress, and cancellation controls.
-
-## OpenAI-compatible endpoint
-
-```text
-POST /v1/audio/speech
-```
-
-The endpoint accepts OpenAI-style TTS requests, but `voice` is intentionally ignored because FrankenVoice is one changing composite voice.
-
 ## Frontend
 
 ```bash
@@ -155,17 +136,39 @@ npm run dev
 
 UI: `http://localhost:5173`
 
-## Alibaba Cloud deployment
+The default **AUTOPILOT** tab demonstrates:
 
-A reproducible Alibaba ECS deployment package is included at:
+- Qwen workflow planning;
+- constrained tool selection;
+- persistent run state;
+- external-action estimates;
+- human-in-the-loop approval;
+- live execution events;
+- final composite playback.
 
-```text
-deploy/alibaba/
+The existing **COMPOSER** and **READER** tabs remain available for direct use.
+
+## Direct composite API
+
+```bash
+curl -X POST http://localhost:8000/api/speech/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text":"I am trying to reach you through this damaged transmission.",
+    "filter_preset":"robot_radio",
+    "speed":1.0,
+    "pause_scale":1.0
+  }' \
+  --output frankenvoice.wav
 ```
 
-It contains Dockerfiles, Docker Compose, same-origin Nginx proxy configuration, an environment template, architecture notes, and submission verification URLs.
+The OpenAI-compatible endpoint remains:
 
-See [Alibaba Cloud deployment proof](deploy/alibaba/README.md).
+```text
+POST /v1/audio/speech
+```
+
+Its `voice` field is intentionally ignored because FrankenVoice is one changing composite voice.
 
 ## QA
 
@@ -177,7 +180,7 @@ npm install
 npm run build
 ```
 
-CI uses mocks and never requires a real cloud key.
+Cloud calls are mocked in CI; no real API key is exposed.
 
 ## License
 
