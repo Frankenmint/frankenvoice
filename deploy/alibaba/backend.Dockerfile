@@ -26,4 +26,14 @@ RUN pip install --upgrade pip \
     && pip install -r requirements.txt \
     && mv /usr/local/bin/yt-dlp /usr/local/bin/yt-dlp-real
 
-COPY deploy/alibaba/yt
+COPY deploy/alibaba/yt-dlp-guard /usr/local/bin/yt-dlp
+RUN chmod 0755 /usr/local/bin/yt-dlp
+
+COPY backend ./backend
+RUN mkdir -p \
+    /app/data/autopilot/runs \
+    /app/data/dataset/clips \
+    /app/data/sources
+
+EXPOSE 8000
+CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
