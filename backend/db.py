@@ -134,6 +134,21 @@ def get_source(source_id: int) -> Optional[Dict]:
     return dict(row) if row else None
 
 
+def get_source_progress(source_id: int) -> Optional[Dict]:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT s.*, COUNT(c.id) AS clip_count
+            FROM sources s
+            LEFT JOIN clips c ON c.source_id = s.id
+            WHERE s.id = ?
+            GROUP BY s.id
+            """,
+            (source_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
 def get_clip_path_hash(word: str, source_id: int, start_time: float) -> str:
     unique_string = f"{word}_{source_id}_{start_time}"
     hash_hex = hashlib.md5(unique_string.encode(), usedforsecurity=False).hexdigest()
