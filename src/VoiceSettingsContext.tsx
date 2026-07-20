@@ -12,4 +12,22 @@ const VoiceSettingsContext = createContext<VoiceSettingsContextValue | null>(nul
 export const VoiceSettingsProvider = ({ children }: { children: ReactNode }) => {
   const [settings, setSettings] = useState<VoiceSettings>(defaultVoiceSettings);
 
-  const value = useMemo<VoiceSettingsContext
+  const value = useMemo<VoiceSettingsContextValue>(
+    () => ({
+      settings,
+      setSetting: (key, nextValue) => {
+        setSettings((current) => ({ ...current, [key]: nextValue }));
+      },
+      resetSettings: () => setSettings(defaultVoiceSettings),
+    }),
+    [settings],
+  );
+
+  return <VoiceSettingsContext.Provider value={value}>{children}</VoiceSettingsContext.Provider>;
+};
+
+export const useVoiceSettings = () => {
+  const context = useContext(VoiceSettingsContext);
+  if (!context) throw new Error('useVoiceSettings must be used inside VoiceSettingsProvider');
+  return context;
+};
