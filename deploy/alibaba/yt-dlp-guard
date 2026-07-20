@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+exec /usr/local/bin/yt-dlp-real \
+  --no-playlist \
+  --match-filter "duration <= 600 & !is_live" \
+  "$@"
