@@ -124,6 +124,7 @@ def process_audio_file(file_path: str, source_id: int) -> None:
                     "loudness": -20.0,
                     "ctx_before": "",
                     "ctx_after": "",
+                    "provenance": "original",
                 })
         db.update_source_status(source_id, "complete")
     except Exception:
@@ -141,11 +142,16 @@ def rank_clips(
 ):
     if not clips:
         return None
-    unused = [clip for clip in clips if clip["id"] not in recently_used] or clips
+
+    originals = [clip for clip in clips if clip.get("provenance") != "qwen_derived"]
+    candidates = originals or clips
+    unused = [clip for clip in candidates if clip["id"] not in recently_used] or candidates
+
     if source_diversity > 0 and recent_sources:
         diverse = [clip for clip in unused if clip.get("source_id") not in recent_sources]
         if diverse and rng.random() < source_diversity / 100:
             unused = diverse
+
     unused.sort(key=lambda clip: clip.get("confidence") or 0.0, reverse=True)
     pool_size = max(1, min(len(unused), 1 + round((variation / 100) * (len(unused) - 1))))
     return rng.choice(unused[:pool_size])
@@ -226,6 +232,8 @@ def generate_speech(
     for index, match in enumerate(matches):
         token = match.group(0)
         clips = db.get_clips_for_word(token.lower())
+        if not clips and "'" not in token:
+            clips = db.get_clips_for_word(token.lower().replace("'", ""))
         selected_clip = rank_clips(
             clips,
             recently_used,
@@ -236,6 +244,10 @@ def generate_speech(
         )
         seg = None
         if selected_clip:
+            print(
+                f"FrankenVoice selected word={token!r} clip={selected_clip['id']} "
+                f"source={selected_clip.get('source_id')} provenance={selected_clip.get('provenance', 'original')}"
+            )
             clip_path = Path(selected_clip["file_path"])
             clip_path = clip_path if clip_path.is_absolute() else PROJECT_ROOT / clip_path
             if clip_path.exists():
@@ -253,6 +265,7 @@ def generate_speech(
                     recent_sources.append(source_id)
                     recent_sources = recent_sources[-3:]
         if seg is None:
+            print(f"FrankenVoice fallback word={token!r} provider=espeak")
             seg = generate_espeak_fallback(token)
             last_clip_path = None
         next_start = matches[index + 1].start() if index + 1 < len(matches) else len(text)
