@@ -41,9 +41,11 @@ function App() {
       {mode === 'composer' && <Composer />}
       {mode === 'reader' && <ConversationReader />}
 
-      <aside className="w-80 border-l border-slate-800 bg-slate-900 p-6">
-        <VoiceControls />
-      </aside>
+      {mode === 'composer' && (
+        <aside className="w-80 border-l border-slate-800 bg-slate-900 p-6">
+          <VoiceControls />
+        </aside>
+      )}
     </div>
   );
 }
