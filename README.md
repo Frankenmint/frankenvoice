@@ -148,6 +148,24 @@ The default **AUTOPILOT** tab demonstrates:
 
 The existing **COMPOSER** and **READER** tabs remain available for direct use.
 
+## Public Alibaba Cloud deployment
+
+The submission deployment runs the full frontend and FastAPI Autopilot backend on Alibaba Cloud ECS behind one public origin:
+
+```text
+https://frankenvoice.frankenmint.com
+→ Cloudflare
+→ Alibaba ECS host Nginx
+→ React/Nginx container
+→ same-origin /api and /v1 proxy
+→ FastAPI Autopilot container
+→ Qwen Cloud APIs
+```
+
+Because the browser only communicates with `https://frankenvoice.frankenmint.com`, the public deployment does not require cross-origin browser requests.
+
+Deployment files and verification instructions are under [`deploy/alibaba/`](deploy/alibaba/README.md).
+
 ## Direct composite API
 
 ```bash
