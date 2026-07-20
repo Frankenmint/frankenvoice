@@ -249,6 +249,14 @@ def import_youtube(url: str, background_tasks: BackgroundTasks):
     return {"status": "processing", "source_id": source_id}
 
 
+@app.get("/api/sources/{source_id}")
+def source_progress(source_id: int):
+    source = db.get_source_progress(source_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return source
+
+
 @app.post("/api/sources/{source_id}/qwen-transcribe")
 def qwen_transcribe_source(source_id: int, req: QwenTranscriptionRequest):
     try:

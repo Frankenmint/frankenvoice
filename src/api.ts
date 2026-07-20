@@ -41,6 +41,15 @@ export interface ConversationChunks {
   count: number;
 }
 
+export interface SourceProgress {
+  id: number;
+  title: string;
+  source_type: string;
+  status: 'pending' | 'processing' | 'complete' | 'failed';
+  clip_count: number;
+  created_at: string;
+}
+
 export interface AutopilotRun {
   id: string;
   status: 'awaiting_approval' | 'approved' | 'executing' | 'complete' | 'failed';
@@ -185,4 +194,9 @@ export const importYouTubeSource = async (url: string) => {
     params: { url },
   });
   return response.data as { status: string; source_id: number };
+};
+
+export const getSourceProgress = async (sourceId: number): Promise<SourceProgress> => {
+  const response = await axios.get(`${API_BASE}/api/sources/${sourceId}`);
+  return response.data;
 };
