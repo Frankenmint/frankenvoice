@@ -164,7 +164,7 @@ https://frankenvoice.frankenmint.com
 
 Because the browser only communicates with `https://frankenvoice.frankenmint.com`, the public deployment does not require cross-origin browser requests.
 
-Deployment files and verification instructions are under [`deploy/alibaba/`](deploy/alibaba/README.md).
+For complete first-deploy, Nginx, Cloudflare, TLS, backup, update, rollback, monitoring, and incident procedures, see [`DEPLOYMENT.md`](DEPLOYMENT.md). Submission-specific deployment proof remains under [`deploy/alibaba/`](deploy/alibaba/README.md).
 
 ## Direct composite API
 
